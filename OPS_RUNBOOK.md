@@ -1,51 +1,50 @@
-# MikroScope Ops Runbook
+# MikroScope ops runbook
 
-This runbook covers day-2 operations for MikroScope in production:
-
-- health checks
-- backup strategy
-- restore and recovery procedures
+This runbook covers day-2 operations for production deployments.
 
 ## Scope
 
-MikroScope state is split across:
+| Data type | Typical path | Recovery notes |
+| --- | --- | --- |
+| Raw logs (source of truth) | `./logs/**/*.ndjson` | Keep these protected/backed up |
+| SQLite index | `./data/mikroscope.db` (+ `-wal`, `-shm`) | Rebuildable from raw logs |
 
-- raw log files (for example `./logs/**/*.ndjson`)
-- indexed SQLite files (for example `./data/mikroscope.db`, plus `-wal` and `-shm`)
+## Health checks
 
-Raw logs are the source of truth. The SQLite index can always be rebuilt from logs with a full reindex.
-
-## Health Checks
-
-Use the sidecar health endpoint:
+Primary health call:
 
 ```bash
 curl -sS http://127.0.0.1:4310/health | jq .
 ```
 
-Check:
+| Field | Expected |
+| --- | --- |
+| `ok` | `true` |
+| `ingest.lastError` | empty |
+| `maintenance.lastError` | empty |
+| `alerting.lastError` | empty |
+| `storage.*FreeBytes` | above your operating threshold |
 
-- `ok` is `true`
-- `ingest.lastError` is empty
-- `maintenance.lastError` is empty
-- `alerting.lastError` is empty
-- free disk values (`storage.*FreeBytes`) are healthy
+## Backup policy
 
-## Backup Policy
+Minimum backup set:
 
-Minimum recommended backup set:
-
-- `logs/` (including `logs/audit/` if used)
-- `data/mikroscope.db`
-- `data/mikroscope.db-wal` (if present)
-- `data/mikroscope.db-shm` (if present)
+| Path | Required |
+| --- | --- |
+| `logs/` | Yes |
+| `logs/audit/` (if used) | Yes |
+| `data/mikroscope.db` | Yes |
+| `data/mikroscope.db-wal` (if present) | Yes |
+| `data/mikroscope.db-shm` (if present) | Yes |
 
 Recommended cadence:
 
-- logs: continuous (or hourly snapshots)
-- SQLite index: daily snapshot
+| Item | Cadence |
+| --- | --- |
+| Logs | Continuous replication or hourly snapshots |
+| SQLite index | Daily snapshot |
 
-Example snapshot command:
+Snapshot example:
 
 ```bash
 SNAPSHOT_DIR="/var/backups/mikroscope/$(date +%Y%m%d-%H%M%S)"
@@ -54,14 +53,12 @@ cp -a logs "$SNAPSHOT_DIR/logs"
 cp -a data "$SNAPSHOT_DIR/data"
 ```
 
-## Restore Procedures
+## Restore procedures
 
-### Option A: Restore from logs only (preferred)
-
-Use this when raw logs are intact and the index is missing/corrupted/stale.
+### Option A: restore from logs only (preferred)
 
 1. Stop MikroScope.
-2. Remove or archive existing DB files (`.db`, `.db-wal`, `.db-shm`).
+2. Remove or archive current DB files (`.db`, `.db-wal`, `.db-shm`).
 3. Start MikroScope.
 4. Trigger full reindex:
 
@@ -70,41 +67,25 @@ curl -sS -X POST http://127.0.0.1:4310/api/reindex \
   -H "Authorization: Bearer $MIKROSCOPE_API_TOKEN" | jq .
 ```
 
-1. Verify `/health` and sample `/api/logs` query responses.
+5. Verify `/health` and sample `/api/logs` responses.
 
-### Option B: Restore logs + DB from snapshot
-
-Use this when both logs and index must be rolled back to a known snapshot.
+### Option B: restore logs + DB snapshot
 
 1. Stop MikroScope.
 2. Restore snapshot files into `logs/` and `data/`.
 3. Ensure ownership/permissions match runtime user.
 4. Start MikroScope.
 5. Verify `/health`.
-6. Run `POST /api/reindex` if you need to force reconciliation with current log files.
+6. Run `POST /api/reindex` if reconciliation is required.
 
-## Incident Playbook
+## Incident playbook
 
-### Symptom: API is up but no new logs appear
+| Symptom | Checks | Typical action |
+| --- | --- | --- |
+| API responds but no new logs appear | `/health` -> `ingest.lastError`, disk space, raw log writes | Fix ingest/disk issue, then run `/api/reindex` if index is stale |
+| Alert webhooks not delivering | `/health` -> `alerting.lastError`, webhook reachability | Fix webhook/network, then tune retry/timeout/backoff if needed |
 
-1. Check `/health` -> `ingest.lastError`.
-2. Confirm raw logs are still being appended.
-3. Confirm free disk is above policy minimum.
-4. If index is stale, run `POST /api/reindex`.
-
-### Symptom: Alert webhooks not delivering
-
-1. Check `/health` -> `alerting.lastError`.
-2. Confirm webhook URL and network egress.
-3. Confirm alert thresholds and cooldown are configured as intended.
-4. If endpoint is flaky, tune:
-   - `MIKROSCOPE_ALERT_WEBHOOK_TIMEOUT_MS`
-   - `MIKROSCOPE_ALERT_WEBHOOK_RETRY_ATTEMPTS`
-   - `MIKROSCOPE_ALERT_WEBHOOK_BACKOFF_MS`
-
-## Verification After Any Restore
-
-Run:
+## Post-restore verification
 
 ```bash
 curl -sS http://127.0.0.1:4310/health | jq .
@@ -112,8 +93,8 @@ curl -sS "http://127.0.0.1:4310/api/logs?limit=50" \
   -H "Authorization: Bearer $MIKROSCOPE_API_TOKEN" | jq .
 ```
 
-Confirm:
-
-- no server errors
-- expected recent logs are returned
-- pagination fields (`hasMore`, `limit`, `nextCursor`) look correct
+| Check | Expected |
+| --- | --- |
+| API errors | None |
+| Recent logs | Present |
+| Pagination fields | `hasMore`, `limit`, `nextCursor` are coherent |

@@ -1,0 +1,23 @@
+[Unit]
+Description=MikroScope API Sidecar
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=mikroscope
+Group=mikroscope
+WorkingDirectory=/srv/mikroscope
+EnvironmentFile=/etc/mikroscope/mikroscope.env
+ExecStart=/usr/bin/env node /srv/mikroscope/dist/cli.mjs serve --host ${MIKROSCOPE_HOST} --port ${MIKROSCOPE_PORT} --logs ${MIKROSCOPE_LOGS_PATH} --db ${MIKROSCOPE_DB_PATH}
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/mikroscope/data /srv/mikroscope/logs
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

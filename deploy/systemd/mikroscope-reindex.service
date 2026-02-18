@@ -1,0 +1,9 @@
+[Unit]
+Description=MikroScope Full Reindex Job
+Wants=network-online.target
+After=network-online.target mikroscope.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/mikroscope/mikroscope.env
+ExecStart=/usr/bin/env curl --fail --show-error --silent -X POST http://127.0.0.1:${MIKROSCOPE_PORT}/api/reindex -H "Authorization: Bearer ${MIKROSCOPE_API_TOKEN}"

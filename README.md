@@ -1,209 +1,319 @@
 # MikroScope
 
-MikroScope is a lightweight log sidecar for Node.js.
+**Log sidecar for NDJSON: ingest, query, retention, and alerts.**
 
-It ingests `*.ndjson` logs, indexes them in [Node.js-native SQLite](https://nodejs.org/api/sqlite.html), and provides:
+MikroScope runs next to your service, writes/reads `.ndjson` logs, indexes them into SQLite, and exposes an HTTP API for search and aggregation.
 
-- Local HTTP API for querying and aggregating logs
-- Incremental ingest and retention maintenance
-- Optional webhook alerting
+## What You Get
 
-## Purpose
+| Capability | What it does | Why it matters |
+| --- | --- | --- |
+| Ingest API | Accepts logs over HTTP and writes `.ndjson` files | Lets backend and frontend send logs to one place |
+| SQLite index | Continuously indexes raw logs | Fast queries without giving up raw source logs |
+| Query + aggregate API | Filter logs and group by level/event/field/correlation | Quick troubleshooting and basic analytics |
+| Health + docs endpoints | Runtime health plus OpenAPI/interactive reference | Easier operations and integration |
+| Retention + maintenance | Cleans old DB/log records and checks free disk | Keeps long-running deployments stable |
+| Webhook alerts | Sends notifications for error spikes or outages | Basic operational alerting without extra tooling |
 
-MikroScope keeps observability concerns separate from application runtime:
+## Install
 
-- Application writes logs
-- MikroScope owns indexing, querying, retention, and alert checks
+| Requirement | Notes |
+| --- | --- |
+| Node.js `>= 24` | Required to run the release binary/wrapper |
+| `curl` or `wget` | Used by installer to download release assets |
+| `tar` (or `unzip` for `.zip`) | Needed to extract release archive |
 
-## Installation
+| Method | Recommended for | Command |
+| --- | --- | --- |
+| One-line installer | Most users | See command below |
+| Non-interactive installer | CI/provisioning | See command below |
+| Manual release archive | Pinned/manual installs | See "Manual Release Install" below |
 
-Prerequisites:
+Installer behavior:
 
-- Node.js `>= 24`
+| Step | Result |
+| --- | --- |
+| Download latest release | Fetches latest tagged archive from GitHub Releases |
+| Verify checksum | Uses `SHA256SUMS.txt` when available |
+| Expand archive | Installs binaries/docs under your chosen install directory |
+| Prompt for config | Writes host/port/path/auth settings to a local env file |
+| Create wrapper | Adds a `mikroscope` command in your chosen bin directory |
 
-From repository root:
+One-line installer:
 
 ```bash
-npm install
+curl -fsSL https://raw.githubusercontent.com/mikaelvesavuori/mikroscope/main/scripts/install.sh | sh
+```
+
+Non-interactive installer:
+
+```bash
+MIKROSCOPE_INSTALL_NONINTERACTIVE=1 \
+MIKROSCOPE_INSTALL_DIR="$HOME/.local/share/mikroscope" \
+MIKROSCOPE_BIN_DIR="$HOME/.local/bin" \
+curl -fsSL https://raw.githubusercontent.com/mikaelvesavuori/mikroscope/main/scripts/install.sh | sh
+```
+
+If `mikroscope` is not found after install, add your chosen bin directory to `PATH` (the installer prints the exact export command).
+
+### Manual Release Install
+
+```bash
+VERSION=0.1.0
+curl -LO "https://github.com/mikaelvesavuori/mikroscope/releases/download/v${VERSION}/mikroscope-${VERSION}.tar.gz"
+curl -LO "https://github.com/mikaelvesavuori/mikroscope/releases/download/v${VERSION}/SHA256SUMS.txt"
+shasum -a 256 -c SHA256SUMS.txt
+tar -xzf "mikroscope-${VERSION}.tar.gz"
+cd "mikroscope-${VERSION}"
+./mikroscope serve --host 127.0.0.1 --port 4310 --logs ./logs --db ./data/mikroscope.db
 ```
 
 ## Quick Start
 
-From repository root:
+1. Start MikroScope with API auth and ingest producer mappings:
 
 ```bash
-# One-time full index
-npm run mikroscope:index
-
-# Start API server on http://127.0.0.1:4310
-npm run mikroscope:serve
+mikroscope serve \
+  --host 127.0.0.1 \
+  --port 4310 \
+  --logs ./logs \
+  --db ./data/mikroscope.db \
+  --api-token "api-token-123" \
+  --ingest-producers "backend-token=backend-api,frontend-token=frontend-web"
 ```
 
-Useful helpers:
+2. Send logs from one producer:
 
 ```bash
-# Query from CLI
-npm run mikroscope:query -- --level ERROR --limit 50
-
-# Run MikroScope + console together
-npm run mikroscope:dev
-```
-
-## Usage
-
-Main CLI commands:
-
-- `serve`: run the sidecar HTTP/HTTPS API
-- `index`: perform full index over log files
-- `query`: fetch paginated log entries from SQLite
-- `aggregate`: grouped counts by `level`, `event`, `field`, or `correlation`
-
-Examples:
-
-```bash
-# Serve with API token protection
-tsx mikroscope/src/cli.ts serve --host 127.0.0.1 --port 4310 --api-token your-token
-
-# Query by field
-tsx mikroscope/src/cli.ts query --db ./data/mikroscope.db --field customerId --value CUST-42 --limit 100
-
-# Aggregate by correlation
-tsx mikroscope/src/cli.ts aggregate --db ./data/mikroscope.db --group-by correlation --limit 50
-```
-
-## Configuration
-
-You can configure via CLI flags or environment variables.
-
-Core:
-
-- `--logs` default `./logs`
-- `--db` default `./data/mikroscope.db`
-- `--host` default `127.0.0.1`
-- `--port` default `4310`
-
-Security/network:
-
-- `--api-token` / `MIKROSCOPE_API_TOKEN` (protects `/api/*`)
-- `--auth-username` / `MIKROSCOPE_AUTH_USERNAME` and `--auth-password` / `MIKROSCOPE_AUTH_PASSWORD` for Basic Auth on `/api/*`
-- `--cors-allow-origin` / `MIKROSCOPE_CORS_ALLOW_ORIGIN`
-- `--https`, `--tls-cert`, `--tls-key` for native HTTPS
-
-Ingest and maintenance:
-
-- `--ingest-interval-ms` / `MIKROSCOPE_INGEST_INTERVAL_MS` (default `2000`)
-- `--disable-auto-ingest` / `MIKROSCOPE_DISABLE_AUTO_INGEST`
-- `--ingest-producers` / `MIKROSCOPE_INGEST_PRODUCERS` as `token=producerId` pairs (comma separated)
-- `--ingest-max-body-bytes` / `MIKROSCOPE_INGEST_MAX_BODY_BYTES` (default `1048576`)
-- `--ingest-async-queue` / `MIKROSCOPE_INGEST_ASYNC_QUEUE` (default `false`)
-- `--ingest-queue-flush-ms` / `MIKROSCOPE_INGEST_QUEUE_FLUSH_MS` (default `25`)
-- retention flags (`--db-retention-days`, `--log-retention-days`, audit equivalents)
-- `--maintenance-interval-ms`, `--min-free-bytes`
-- `--audit-backup-dir` / `MIKROSCOPE_AUDIT_BACKUP_DIR`
-
-Alerting:
-
-- `--alert-webhook-url` / `MIKROSCOPE_ALERT_WEBHOOK_URL`
-- `--alert-interval-ms`, `--alert-window-minutes`, `--alert-error-threshold`
-- `--alert-no-logs-threshold-minutes`, `--alert-cooldown-ms`
-- `--alert-webhook-timeout-ms`, `--alert-webhook-retry-attempts`, `--alert-webhook-backoff-ms`
-
-Reference defaults are visible in:
-
-- `mikroscope/src/cli.ts`
-- `.env.example`
-
-## HTTP API
-
-OpenAPI 3.1 specification:
-
-- `openapi/openapi.yaml`
-- `openapi/openapi.json`
-- `GET /openapi.yaml` serves this specification at runtime
-- `GET /openapi.json` serves this specification as JSON at runtime
-- `GET /docs` (or `/docs/`) serves Scalar API Reference backed by `/openapi.json`
-
-`GET /health`
-
-- service/maintenance/ingest/alert/storage status
-- no auth required
-
-`GET /api/logs`
-
-- paginated log query response: `{ entries, hasMore, limit, nextCursor? }`
-- params: `from`, `to`, `level`, `audit`, `field`, `value`, `limit`, `cursor`
-- `limit` is capped at `1000`
-
-`GET /api/logs/aggregate`
-
-- grouped counts: `{ buckets, groupBy, groupField }`
-- params: `groupBy=level|event|field|correlation`, optional filters from `/api/logs`
-- `groupField` required when `groupBy=field`
-- `limit` is capped at `1000`
-
-`POST /api/ingest`
-
-- requires auth via either:
-- `Authorization: Basic <base64(username:password)>` when Basic Auth is configured
-- `Authorization: Bearer <token>` where token is configured in `--ingest-producers`
-- accepts either an array of logs (`[ ... ]`) or `{ "logs": [ ... ] }`
-- writes accepted logs to `.ndjson` under `logs/ingest/<producerId>/YYYY-MM-DD.ndjson`
-- `producerId` is always set from auth identity; any incoming `producerId` in payload is overridden
-- with Basic Auth, `producerId` is set to authenticated username
-- returns `200` by default, or `202` with `{ queued: true }` when `--ingest-async-queue` is enabled
-
-`POST /api/reindex`
-
-- full reindex with DB reset + incremental cursor reset
-- response includes `{ report, reset }`
-
-Example:
-
-```bash
-curl -sS "http://127.0.0.1:4310/api/logs?level=ERROR&limit=100" \
-  -H "Authorization: Bearer $MIKROSCOPE_API_TOKEN"
-
 curl -sS "http://127.0.0.1:4310/api/ingest" \
-  -H "Authorization: Bearer $MIKROSCOPE_INGEST_TOKEN" \
+  -H "Authorization: Bearer backend-token" \
   -H "Content-Type: application/json" \
-  --data '[{"timestamp":"2026-02-18T10:20:00.000Z","level":"INFO","event":"frontend.click","message":"click"}]'
+  --data '[{"timestamp":"2026-02-18T10:20:00.000Z","level":"INFO","event":"order.created","message":"Order created","orderId":"ORD-123"}]'
 ```
 
-## Deployment Example (systemd)
+3. Query logs:
 
-Minimal service example:
-
-```ini
-[Unit]
-Description=MikroScope
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/srv/my-app
-ExecStart=/usr/bin/env tsx mikroscope/src/cli.ts serve --host 127.0.0.1 --port 4310 --logs /srv/my-app/logs --db /srv/my-app/data/mikroscope.db
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
+```bash
+curl -sS "http://127.0.0.1:4310/api/logs?field=producerId&value=backend-api&limit=10" \
+  -H "Authorization: Bearer api-token-123"
 ```
 
-For public exposure, place MikroScope behind a reverse proxy and TLS terminator (for example Caddy).
+4. Open docs and health:
+
+| URL | Purpose |
+| --- | --- |
+| `http://127.0.0.1:4310/health` | Service health/status payload |
+| `http://127.0.0.1:4310/docs` | Interactive API reference (Scalar) |
+| `http://127.0.0.1:4310/openapi.json` | OpenAPI 3.1 JSON |
+| `http://127.0.0.1:4310/openapi.yaml` | OpenAPI 3.1 YAML |
+
+If `/docs` is blank (for example blocked CDN scripts), use `/openapi.json` directly.
+
+## CLI Commands
+
+| Command | Use case |
+| --- | --- |
+| `mikroscope serve --logs ./logs --db ./data/mikroscope.db` | Start HTTP/HTTPS API service |
+| `mikroscope index --logs ./logs --db ./data/mikroscope.db` | One-time full index from raw logs |
+| `mikroscope query --db ./data/mikroscope.db --level ERROR --limit 50` | Query logs from CLI |
+| `mikroscope aggregate --db ./data/mikroscope.db --group-by level --limit 10` | Aggregate logs from CLI |
+
+## Auth and `producerId` Model
+
+| Route | Auth options | `producerId` behavior |
+| --- | --- | --- |
+| `POST /api/ingest` | `Bearer <ingest-token>` mapped by `--ingest-producers`, or Basic auth if configured | Always server-assigned. Incoming `producerId` in payload is ignored/overridden. |
+| `GET /api/logs` | `Bearer <api-token>` and/or Basic auth (if enabled) | N/A |
+| `GET /api/logs/aggregate` | `Bearer <api-token>` and/or Basic auth (if enabled) | N/A |
+| `POST /api/reindex` | `Bearer <api-token>` and/or Basic auth (if enabled) | N/A |
+
+Notes:
+
+| Case | Outcome |
+| --- | --- |
+| Basic auth is used on ingest | `producerId` becomes the authenticated username |
+| `--ingest-producers` is empty and Basic auth is disabled | `/api/ingest` returns `404` (endpoint disabled) |
+| Async ingest queue enabled (`--ingest-async-queue`) | Ingest responses return `202` with `queued: true` |
+
+## Ingest Contract
+
+| Item | Value |
+| --- | --- |
+| Endpoint | `POST /api/ingest` |
+| Content type | `application/json` |
+| Accepted payload shapes | `[{...}]` or `{ "logs": [{...}] }` |
+| Max payload size | Controlled by `--ingest-max-body-bytes` (default `1048576`) |
+| Required fields per log | No strict schema at ingest layer; invalid/non-object items are rejected |
+| Server-added fields | `producerId`, `ingestedAt` |
+| Storage path | `logs/ingest/<producerId>/YYYY-MM-DD.ndjson` |
+
+## API Summary
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET` | `/health` | None | Runtime health and policy/status details |
+| `POST` | `/api/ingest` | Ingest bearer token mapping or Basic auth | Accept and persist inbound logs |
+| `GET` | `/api/logs` | API bearer token and/or Basic auth | Paginated log query |
+| `GET` | `/api/logs/aggregate` | API bearer token and/or Basic auth | Bucketed counts |
+| `POST` | `/api/reindex` | API bearer token and/or Basic auth | Full DB reset + reindex from logs |
+| `GET` | `/openapi.json` | None | OpenAPI 3.1 JSON document |
+| `GET` | `/openapi.yaml` | None | OpenAPI 3.1 YAML document |
+| `GET` | `/docs` | None | Scalar-rendered interactive API docs |
+
+Query parameters for `/api/logs`:
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `from` | ISO timestamp | Lower bound |
+| `to` | ISO timestamp | Upper bound |
+| `level` | string | `DEBUG`, `INFO`, `WARN`, `ERROR`, or custom |
+| `audit` | boolean | Audit-only filter |
+| `field` | string | Top-level JSON field key |
+| `value` | string | Top-level JSON field value |
+| `limit` | number | Max rows (capped at `1000`) |
+| `cursor` | string | Pagination cursor from previous result |
+
+Query parameters for `/api/logs/aggregate`:
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `groupBy` | enum | `level`, `event`, `field`, `correlation` |
+| `groupField` | string | Required when `groupBy=field` |
+| `from`, `to`, `level`, `audit`, `field`, `value`, `limit` | mixed | Same filtering behavior as `/api/logs` |
+
+## Configuration Reference
+
+### Core and Security
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--logs` | `./logs` | NDJSON root directory |
+| `--db` | `./data/mikroscope.db` | SQLite database file |
+| `--host` | `127.0.0.1` | Bind host |
+| `--port` | `4310` | Bind port |
+| `--https` | `false` | Enable HTTPS listener |
+| `--tls-cert` | none | TLS certificate path (required with `--https`) |
+| `--tls-key` | none | TLS key path (required with `--https`) |
+| `--api-token` | none | Bearer token for `/api/*` routes |
+| `--auth-username` | none | Basic auth username for `/api/*` |
+| `--auth-password` | none | Basic auth password for `/api/*` |
+| `--cors-allow-origin` | `*` | CORS allow list (comma-separated origins) |
+
+### Ingest and Indexing
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--ingest-producers` | none | Ingest auth map as `token=producerId` pairs |
+| `--ingest-max-body-bytes` | `1048576` | Max ingest request body size |
+| `--ingest-interval-ms` | `2000` | Incremental ingest cadence |
+| `--disable-auto-ingest` | `false` | Disable periodic incremental ingest |
+| `--ingest-async-queue` | `false` | Enable async ingest write/index queue |
+| `--ingest-queue-flush-ms` | `25` | Async queue flush cadence |
+
+### Retention and Maintenance
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--db-retention-days` | `30` | Retain non-audit indexed rows for N days |
+| `--db-audit-retention-days` | `365` | Retain audit indexed rows for N days |
+| `--log-retention-days` | `30` | Retain non-audit raw `.ndjson` files for N days |
+| `--log-audit-retention-days` | `365` | Retain audit raw `.ndjson` files for N days |
+| `--audit-backup-dir` | none | Optional backup target before deleting audit files |
+| `--maintenance-interval-ms` | `21600000` | Maintenance cadence |
+| `--min-free-bytes` | `268435456` | Minimum free bytes for DB/log paths |
+
+### Alerting
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `--alert-webhook-url` | none | Webhook target for alert payloads |
+| `--alert-interval-ms` | `30000` | Alert evaluation cadence |
+| `--alert-window-minutes` | `5` | Error threshold lookback window |
+| `--alert-error-threshold` | `20` | Error count threshold in alert window |
+| `--alert-no-logs-threshold-minutes` | `0` | Alert when no logs for N minutes (`0` disables) |
+| `--alert-cooldown-ms` | `300000` | Minimum delay between same-rule notifications |
+| `--alert-webhook-timeout-ms` | `5000` | Webhook timeout per request |
+| `--alert-webhook-retry-attempts` | `3` | Webhook retry attempts per alert |
+| `--alert-webhook-backoff-ms` | `250` | Base backoff between webhook retries |
+
+## Example Integrations
+
+| Producer | Example |
+| --- | --- |
+| Backend service | `Authorization: Bearer backend-token` mapped to `backend-api` |
+| Frontend app | `Authorization: Bearer frontend-token` mapped to `frontend-web` |
+
+Backend example:
+
+```ts
+await fetch("http://127.0.0.1:4310/api/ingest", {
+  method: "POST",
+  headers: {
+    authorization: "Bearer backend-token",
+    "content-type": "application/json",
+  },
+  body: JSON.stringify([
+    {
+      timestamp: new Date().toISOString(),
+      level: "INFO",
+      event: "order.created",
+      message: "Order created",
+      orderId: "ORD-123",
+    },
+  ]),
+});
+```
+
+Frontend example:
+
+```ts
+await fetch("http://127.0.0.1:4310/api/ingest", {
+  method: "POST",
+  headers: {
+    authorization: "Bearer frontend-token",
+    "content-type": "application/json",
+  },
+  body: JSON.stringify({
+    logs: [
+      {
+        timestamp: new Date().toISOString(),
+        level: "INFO",
+        event: "ui.click",
+        message: "Checkout clicked",
+        route: "/checkout",
+      },
+    ],
+  }),
+});
+```
+
+## VM Deployment (systemd)
+
+Prepared units are in `/deploy/systemd`:
+
+| File | Purpose |
+| --- | --- |
+| `/deploy/systemd/mikroscope.service` | Long-running API sidecar |
+| `/deploy/systemd/mikroscope-reindex.service` | One-shot full reindex job |
+| `/deploy/systemd/mikroscope-reindex.timer` | Scheduled reindex trigger |
+| `/deploy/systemd/mikroscope.env.example` | Environment template |
+
+Quick start steps are documented in `/deploy/systemd/README.md`.
 
 ## Operations
 
-Backup/restore and incident procedures:
+| Document | Purpose |
+| --- | --- |
+| `/OPS_RUNBOOK.md` | Health checks, backup policy, restore, incident playbook |
+| `/openapi/openapi.yaml` | OpenAPI 3.1 source |
+| `/openapi/openapi.json` | OpenAPI 3.1 JSON |
 
-- `mikroscope/OPS_RUNBOOK.md`
+## From Source (Optional)
 
-## Next
+Use this only if you want to develop MikroScope itself.
 
-- [ ] Systemd jobs/services to get this started quickly on e.g. a VM
-- [ ] Example integrations/get started
-
-## Related
-
-Console UI:
-
-- `mikroscope-console/README.md`
+```bash
+npm install
+npm run index
+npm run start
+```
