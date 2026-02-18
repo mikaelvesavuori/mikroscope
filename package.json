@@ -1,0 +1,56 @@
+{
+  "name": "mikroscope",
+  "description": "Lightweight local log explorer for MikroLog logs",
+  "version": "0.1.0",
+  "author": "Mikael Vesavuori",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "keywords": [],
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikaelvesavuori/mikroscope"
+  },
+  "bugs": {
+    "url": "https://github.com/mikaelvesavuori/mikroscope/issues"
+  },
+  "homepage": "https://github.com/mikaelvesavuori/mikroscope",
+  "files": [
+    "/dist",
+    "!/dist/**/*.map",
+    "!/tests"
+  ],
+  "scripts": {
+    "build": "node esbuild.config.mjs --esm",
+    "clean": "rm -rf dist/ lib/ *.zip *.tgz",
+    "start": "tsx src/cli.ts serve",
+    "index": "tsx src/cli.ts index",
+    "query": "tsx src/cli.ts query",
+    "lint": "biome check ./src ./tests",
+    "lint:fix": "biome check ./src ./tests --write",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "mock-data": "tsx scripts/generate-mikroscope-mock-logs.ts",
+    "mock-data:quick": "MOCK_LOG_DAYS=7 MOCK_LOGS_PER_DAY=600 MOCK_AUDIT_LOGS_PER_DAY=80 MOCK_LOG_TENANTS=140 tsx scripts/generate-mikroscope-mock-logs.ts",
+    "test:performance": "tsx tests/performance/run.perf.ts",
+    "test:performance:quick": "PERF_MS_FILE_COUNT=20 PERF_MS_LOGS_PER_FILE=250 PERF_MS_APPEND_RECORDS=800 PERF_MS_QUERY_COUNT=120 PERF_MS_TENANT_COUNT=350 tsx tests/performance/run.perf.ts",
+    "remove:index": "tsx src/cli.ts index --logs ./logs --db ./data/mikroscope.db",
+    "remove:query": "tsx src/cli.ts query --db ./data/mikroscope.db",
+    "remove:serve": "tsx src/cli.ts serve --host 127.0.0.1 --logs ./logs --db ./data/mikroscope.db --port 4310"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2",
+    "@types/node": "latest",
+    "@vitest/coverage-v8": "4",
+    "esbuild": "latest",
+    "husky": "9",
+    "tsx": "4",
+    "typescript": "5",
+    "vitest": "4"
+  }
+}

@@ -1,0 +1,1433 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "MikroScope API",
+    "version": "0.1.0",
+    "description": "HTTP API for ingesting, indexing, querying, and operating MikroScope logs.\n\nAuthentication behavior is runtime-configurable:\n- `/api/reindex`, `/api/logs`, `/api/logs/aggregate` require Bearer API token and/or Basic auth only if enabled.\n- `/api/ingest` requires producer Bearer token mapping and/or Basic auth username (used as `producerId`) when enabled.\n\nIf no auth is configured for a route category, that category is open.\n"
+  },
+  "servers": [
+    {
+      "url": "http://127.0.0.1:4310",
+      "description": "Default local HTTP server"
+    },
+    {
+      "url": "https://127.0.0.1:4310",
+      "description": "Local HTTPS server (when TLS is configured)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Health"
+    },
+    {
+      "name": "Ingest"
+    },
+    {
+      "name": "Logs"
+    },
+    {
+      "name": "Admin"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "options": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "CORS preflight",
+        "operationId": "preflightHealth",
+        "security": [
+
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "Service health and runtime status",
+        "operationId": "getHealth",
+        "security": [
+
+        ],
+        "responses": {
+          "200": {
+            "description": "Runtime health snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/ingest": {
+      "options": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "CORS preflight",
+        "operationId": "preflightIngest",
+        "security": [
+
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Ingest"
+        ],
+        "summary": "Ingest log records",
+        "operationId": "ingestLogs",
+        "description": "Accepts logs as either:\n- A top-level JSON array\n- An object wrapper `{ \"logs\": [...] }`\n\n`producerId` is always resolved from auth context, not trusted from payload.\n- Bearer token is resolved via producer mapping (`token=producerId`).\n- Basic auth uses the authenticated username as `producerId`.\n\nNon-object log items are rejected per-item (`rejected` count) while valid objects are accepted.\n",
+        "security": [
+          {
+            "producerBearerAuth": [
+
+            ]
+          },
+          {
+            "basicAuth": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              },
+              "examples": {
+                "arrayPayload": {
+                  "summary": "Top-level array payload",
+                  "value": [
+                    {
+                      "timestamp": "2026-02-18T12:10:00.000Z",
+                      "level": "INFO",
+                      "event": "frontend.pageview",
+                      "message": "frontend.pageview",
+                      "producerId": "ignored"
+                    },
+                    "invalid-item"
+                  ]
+                },
+                "wrappedPayload": {
+                  "summary": "Wrapper payload",
+                  "value": {
+                    "logs": [
+                      {
+                        "timestamp": "2026-02-18T12:10:00.000Z",
+                        "level": "INFO",
+                        "event": "frontend.click",
+                        "message": "frontend.click"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ingested and flushed/indexed synchronously",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResponse"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted and queued (async queue enabled)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON or invalid ingest payload structure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "invalidJson": {
+                    "value": {
+                      "error": "Invalid JSON payload."
+                    }
+                  },
+                  "invalidPayload": {
+                    "value": {
+                      "error": "Invalid ingest payload. Expected an array or an object with a logs array."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "description": "Ingest endpoint disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Ingest endpoint is not enabled."
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "example": {
+                  "error": "Payload too large. Max body size is 1048576 bytes."
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/reindex": {
+      "options": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "CORS preflight",
+        "operationId": "preflightReindex",
+        "security": [
+
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Admin"
+        ],
+        "summary": "Rebuild DB index from current logs",
+        "operationId": "reindexLogs",
+        "description": "Resets the DB, then performs full indexing from the configured logs directory.",
+        "security": [
+          {
+            "apiBearerAuth": [
+
+            ]
+          },
+          {
+            "basicAuth": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reindex completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReindexResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "options": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "CORS preflight",
+        "operationId": "preflightLogs",
+        "security": [
+
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Query paginated logs",
+        "operationId": "queryLogs",
+        "security": [
+          {
+            "apiBearerAuth": [
+
+            ]
+          },
+          {
+            "basicAuth": [
+
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/From"
+          },
+          {
+            "$ref": "#/components/parameters/To"
+          },
+          {
+            "$ref": "#/components/parameters/Level"
+          },
+          {
+            "$ref": "#/components/parameters/Audit"
+          },
+          {
+            "$ref": "#/components/parameters/Field"
+          },
+          {
+            "$ref": "#/components/parameters/Value"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page of indexed logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogQueryPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/logs/aggregate": {
+      "options": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "CORS preflight",
+        "operationId": "preflightAggregateLogs",
+        "security": [
+
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Logs"
+        ],
+        "summary": "Aggregate logs by level/event/field/correlation",
+        "operationId": "aggregateLogs",
+        "security": [
+          {
+            "apiBearerAuth": [
+
+            ]
+          },
+          {
+            "basicAuth": [
+
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/From"
+          },
+          {
+            "$ref": "#/components/parameters/To"
+          },
+          {
+            "$ref": "#/components/parameters/Level"
+          },
+          {
+            "$ref": "#/components/parameters/Audit"
+          },
+          {
+            "$ref": "#/components/parameters/Field"
+          },
+          {
+            "$ref": "#/components/parameters/Value"
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "$ref": "#/components/parameters/GroupBy"
+          },
+          {
+            "$ref": "#/components/parameters/GroupField"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Aggregation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AggregateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid aggregation parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "invalidGroupBy": {
+                    "value": {
+                      "error": "Invalid groupBy. Expected level, event, field, or correlation."
+                    }
+                  },
+                  "missingGroupField": {
+                    "value": {
+                      "error": "Missing required groupField when groupBy=field."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "apiBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Token",
+        "description": "Bearer API token for query/admin routes (`MIKROSCOPE_API_TOKEN`)."
+      },
+      "producerBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Token",
+        "description": "Bearer producer token mapped via ingest producer mapping (`token=producerId`)."
+      },
+      "basicAuth": {
+        "type": "http",
+        "scheme": "basic",
+        "description": "Basic auth for API and ingest routes when username/password is configured."
+      }
+    },
+    "parameters": {
+      "From": {
+        "name": "from",
+        "in": "query",
+        "required": false,
+        "description": "Inclusive lower timestamp bound (ISO-8601).",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "To": {
+        "name": "to",
+        "in": "query",
+        "required": false,
+        "description": "Inclusive upper timestamp bound (ISO-8601).",
+        "schema": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "Level": {
+        "name": "level",
+        "in": "query",
+        "required": false,
+        "description": "Log level filter (normalized to uppercase by server).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Audit": {
+        "name": "audit",
+        "in": "query",
+        "required": false,
+        "description": "Audit filter. Supported values: `true`, `false`, `1`, `0`.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "true",
+            "false",
+            "1",
+            "0"
+          ]
+        }
+      },
+      "Field": {
+        "name": "field",
+        "in": "query",
+        "required": false,
+        "description": "Top-level field key filter (applies when `value` is also set).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Value": {
+        "name": "value",
+        "in": "query",
+        "required": false,
+        "description": "Top-level field value filter (applies when `field` is also set).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Limit": {
+        "name": "limit",
+        "in": "query",
+        "required": false,
+        "description": "Max rows/buckets. Default 100 for logs, 25 for aggregate. Hard cap 1000.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 100
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "description": "Cursor token from a previous `/api/logs` response.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "GroupBy": {
+        "name": "groupBy",
+        "in": "query",
+        "required": true,
+        "description": "Aggregation dimension.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "level",
+            "event",
+            "field",
+            "correlation"
+          ]
+        }
+      },
+      "GroupField": {
+        "name": "groupField",
+        "in": "query",
+        "required": false,
+        "description": "Required when `groupBy=field`.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Unauthorized",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "error": "Unauthorized"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "IngestRequest": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "logs"
+            ],
+            "properties": {
+              "logs": {
+                "type": "array",
+                "items": {
+                }
+              }
+            },
+            "additionalProperties": true
+          }
+        ]
+      },
+      "IngestResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "accepted",
+          "queued",
+          "producerId",
+          "receivedAt",
+          "rejected"
+        ],
+        "properties": {
+          "accepted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queued": {
+            "type": "boolean"
+          },
+          "producerId": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rejected": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "ResetResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entriesDeleted",
+          "fieldsDeleted"
+        ],
+        "properties": {
+          "entriesDeleted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fieldsDeleted": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "IndexReport": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "filesScanned",
+          "linesScanned",
+          "recordsInserted",
+          "recordsSkipped",
+          "parseErrors",
+          "startedAt",
+          "finishedAt"
+        ],
+        "properties": {
+          "filesScanned": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "linesScanned": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordsInserted": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordsSkipped": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parseErrors": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "incremental"
+            ]
+          }
+        }
+      },
+      "ReindexResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "report",
+          "reset"
+        ],
+        "properties": {
+          "report": {
+            "$ref": "#/components/schemas/IndexReport"
+          },
+          "reset": {
+            "$ref": "#/components/schemas/ResetResult"
+          }
+        }
+      },
+      "LogRecord": {
+        "type": "object",
+        "description": "Original JSON log object as indexed/ingested.",
+        "additionalProperties": true
+      },
+      "LogEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "timestamp",
+          "level",
+          "event",
+          "message",
+          "data",
+          "sourceFile",
+          "lineNumber"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "level": {
+            "type": "string"
+          },
+          "event": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/LogRecord"
+          },
+          "sourceFile": {
+            "type": "string"
+          },
+          "lineNumber": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "LogQueryPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "entries",
+          "hasMore",
+          "limit"
+        ],
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LogEntry"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "nextCursor": {
+            "type": "string"
+          }
+        }
+      },
+      "AggregateBucket": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "count"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AggregateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "buckets",
+          "groupBy"
+        ],
+        "properties": {
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AggregateBucket"
+            }
+          },
+          "groupBy": {
+            "type": "string",
+            "enum": [
+              "level",
+              "event",
+              "field",
+              "correlation"
+            ]
+          },
+          "groupField": {
+            "type": "string"
+          }
+        }
+      },
+      "IngestState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "running",
+          "runs",
+          "recordsInsertedLastRun",
+          "recordsInsertedTotal",
+          "recordsSkippedLastRun",
+          "recordsSkippedTotal",
+          "parseErrorsLastRun",
+          "parseErrorsTotal",
+          "linesScannedLastRun",
+          "linesScannedTotal",
+          "filesScannedLastRun",
+          "filesScannedTotal"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "runs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastRunAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSuccessAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastDurationMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "recordsInsertedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordsInsertedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordsSkippedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordsSkippedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parseErrorsLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "parseErrorsTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "linesScannedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "linesScannedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "filesScannedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "filesScannedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastMode": {
+            "type": "string",
+            "enum": [
+              "full",
+              "incremental"
+            ]
+          }
+        }
+      },
+      "IngestPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "intervalMs"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "intervalMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "IngestQueueHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "flushMs",
+          "draining",
+          "pendingBatches",
+          "pendingRecords",
+          "recordsFlushed",
+          "recordsQueued"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "flushMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "draining": {
+            "type": "boolean"
+          },
+          "pendingBatches": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pendingRecords": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordsFlushed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recordsQueued": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "lastFlushAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AlertState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "running",
+          "runs",
+          "sent",
+          "suppressed",
+          "lastTriggerAtByRule"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "runs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sent": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "suppressed": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastRunAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSuccessAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastDurationMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "lastTriggerAtByRule": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        }
+      },
+      "AlertPolicy": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "intervalMs",
+          "windowMinutes",
+          "errorThreshold",
+          "noLogsThresholdMinutes",
+          "cooldownMs",
+          "webhookTimeoutMs",
+          "webhookRetryAttempts",
+          "webhookBackoffMs"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "webhookUrl": {
+            "type": "string",
+            "description": "`[configured]` when configured, otherwise omitted."
+          },
+          "intervalMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "windowMinutes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "errorThreshold": {
+            "type": "number",
+            "minimum": 0
+          },
+          "noLogsThresholdMinutes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "cooldownMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "webhookTimeoutMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "webhookRetryAttempts": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "webhookBackoffMs": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "AuthStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "apiTokenEnabled",
+          "basicEnabled"
+        ],
+        "properties": {
+          "apiTokenEnabled": {
+            "type": "boolean"
+          },
+          "basicEnabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RetentionDays": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "db",
+          "dbAudit",
+          "logs",
+          "logsAudit"
+        ],
+        "properties": {
+          "db": {
+            "type": "number",
+            "minimum": 0
+          },
+          "dbAudit": {
+            "type": "number",
+            "minimum": 0
+          },
+          "logs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "logsAudit": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "Backup": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "auditDirectory": {
+            "type": "string"
+          }
+        }
+      },
+      "Storage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "dbApproximateSizeBytes",
+          "dbDirectoryFreeBytes",
+          "logsDirectoryFreeBytes",
+          "minFreeBytes"
+        ],
+        "properties": {
+          "dbApproximateSizeBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "dbDirectoryFreeBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "logsDirectoryFreeBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "minFreeBytes": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      },
+      "MaintenanceState": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "running",
+          "runs",
+          "filesDeletedLastRun",
+          "filesDeletedTotal",
+          "normalFilesDeletedLastRun",
+          "normalFilesDeletedTotal",
+          "auditFilesDeletedLastRun",
+          "auditFilesDeletedTotal",
+          "entriesDeletedLastRun",
+          "entriesDeletedTotal",
+          "normalEntriesDeletedLastRun",
+          "normalEntriesDeletedTotal",
+          "auditEntriesDeletedLastRun",
+          "auditEntriesDeletedTotal",
+          "fieldsDeletedLastRun",
+          "fieldsDeletedTotal",
+          "vacuumRuns"
+        ],
+        "properties": {
+          "running": {
+            "type": "boolean"
+          },
+          "runs": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastRunAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastSuccessAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastDurationMs": {
+            "type": "number",
+            "minimum": 0
+          },
+          "lastError": {
+            "type": "string"
+          },
+          "filesDeletedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "filesDeletedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "normalFilesDeletedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "normalFilesDeletedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "auditFilesDeletedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "auditFilesDeletedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "entriesDeletedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "entriesDeletedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "normalEntriesDeletedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "normalEntriesDeletedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "auditEntriesDeletedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "auditEntriesDeletedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fieldsDeletedLastRun": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "fieldsDeletedTotal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "vacuumRuns": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "IngestEndpointStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "enabled",
+          "maxBodyBytes",
+          "producerCount",
+          "queue"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "maxBodyBytes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "producerCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "queue": {
+            "$ref": "#/components/schemas/IngestQueueHealth"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "service",
+          "uptimeSec",
+          "ingest",
+          "auth",
+          "ingestPolicy",
+          "ingestEndpoint",
+          "alerting",
+          "alertPolicy",
+          "maintenance",
+          "retentionDays",
+          "backup",
+          "storage"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "service": {
+            "type": "string",
+            "enum": [
+              "mikroscope"
+            ]
+          },
+          "uptimeSec": {
+            "type": "number",
+            "minimum": 0
+          },
+          "ingest": {
+            "$ref": "#/components/schemas/IngestState"
+          },
+          "auth": {
+            "$ref": "#/components/schemas/AuthStatus"
+          },
+          "ingestPolicy": {
+            "$ref": "#/components/schemas/IngestPolicy"
+          },
+          "ingestEndpoint": {
+            "$ref": "#/components/schemas/IngestEndpointStatus"
+          },
+          "alerting": {
+            "$ref": "#/components/schemas/AlertState"
+          },
+          "alertPolicy": {
+            "$ref": "#/components/schemas/AlertPolicy"
+          },
+          "maintenance": {
+            "$ref": "#/components/schemas/MaintenanceState"
+          },
+          "retentionDays": {
+            "$ref": "#/components/schemas/RetentionDays"
+          },
+          "backup": {
+            "$ref": "#/components/schemas/Backup"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/Storage"
+          }
+        }
+      }
+    }
+  }
+}
