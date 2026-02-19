@@ -1,8 +1,8 @@
 # MikroScope
 
-**Log sidecar using NDJSON: ingest, query, retention, and alerts.**
+**Ultralight log sidecar for Node.js that turns NDJSON into instant queries and actionable webhook alerts.**
 
-MikroScope runs next to your service, writes/reads `.ndjson` logs, indexes them into SQLite, and exposes an HTTP API for search and aggregation.
+MikroScope runs next to your service, writes/reads `.ndjson` logs, indexes them into SQLite, and exposes an HTTP API for search and aggregation with millisecond latency.
 
 ## What You Get
 
@@ -21,30 +21,28 @@ MikroScope runs next to your service, writes/reads `.ndjson` logs, indexes them 
 
 ## Install
 
-| Requirement                   | Notes                                        |
-|-------------------------------|----------------------------------------------|
-| Node.js `>= 24`               | Required to run MikroScope                   |
-| npm                           | Required for npm install / npx flows         |
-| `curl` or `wget`              | Used by installer to download release assets |
-| `tar` (or `unzip` for `.zip`) | Needed to extract release archive            |
+Requirements:
 
-| Method                    | Recommended for                           | Command                            |
-|---------------------------|-------------------------------------------|------------------------------------|
-| npm global install        | Node/npm environments with persistent CLI | `npm install -g mikroscope`        |
-| npx                       | One-off execution without global install  | `npx mikroscope --help`            |
-| One-line installer        | VM/server installs without npm dependency | See command below                  |
-| Non-interactive installer | CI/provisioning via release assets        | See command below                  |
-| Manual release archive    | Pinned/manual installs                    | See "Manual Release Install" below |
+- Node.js `>= 24` (required to run MikroScope).
+- `npm` (required for npm install / npx flows).
+- `curl` or `wget` (used by installer to download release assets).
+- `tar` (or `unzip` for `.zip`) to extract release archives.
+
+Install methods:
+
+- `npm install -g mikroscope` for persistent CLI usage in Node/npm environments.
+- `npx mikroscope --help` for one-off execution without global install.
+- One-line installer (below) for VM/server installs without npm dependency.
+- Non-interactive installer (below) for CI/provisioning.
+- Manual release archive install (see "Manual Release Install" below) for pinned/manual installs.
 
 Installer behavior:
 
-| Step                    | Result                                                     |
-|-------------------------|------------------------------------------------------------|
-| Download latest release | Fetches latest tagged archive from GitHub Releases         |
-| Verify checksum         | Uses `SHA256SUMS.txt` when available                       |
-| Expand archive          | Installs binaries/docs under your chosen install directory |
-| Prompt for config       | Writes host/port/path/auth settings to a local env file    |
-| Create wrapper          | Adds a `mikroscope` command in your chosen bin directory   |
+- Download latest release from GitHub Releases.
+- Verify checksum using `SHA256SUMS.txt` when available.
+- Expand archive into your chosen install directory.
+- Prompt for host/port/path/auth config values.
+- Create a `mikroscope` wrapper command in your chosen bin directory.
 
 npm install examples:
 
@@ -126,6 +124,87 @@ curl -sS "http://127.0.0.1:4310/api/logs?field=producerId&value=backend-api&limi
 | `http://127.0.0.1:4310/openapi.yaml` | OpenAPI 3.1 YAML                   |
 
 If `/docs` is blank (for example blocked CDN scripts), use `/openapi.json` directly.
+
+## Generate Mock Data
+
+If you want realistic logs to inspect quickly, generate synthetic NDJSON files from a source checkout of this repository.
+
+```bash
+# Standard dataset (writes to ./logs)
+npm run mock-data
+
+# Smaller/faster dataset
+npm run mock-data:quick
+```
+
+What this does:
+
+- Writes normal logs to `./logs/generated/*.ndjson`.
+- Writes audit logs to `./logs/audit/generated/*.ndjson`.
+- Uses deterministic random data (seeded) so runs are reproducible.
+
+Useful tuning options:
+
+- `MOCK_LOG_DAYS` (default: `21`)
+- `MOCK_LOGS_PER_DAY` (default: `1200`)
+- `MOCK_AUDIT_LOGS_PER_DAY` (default: `150`)
+- `MOCK_LOG_TENANTS` (default: `320`)
+- `MOCK_LOG_SEED` (default: `2602`)
+- `MOCK_LOG_OUT_DIR` (default: `./logs`)
+
+Example custom run:
+
+```bash
+MOCK_LOG_DAYS=14 \
+MOCK_LOGS_PER_DAY=800 \
+MOCK_AUDIT_LOGS_PER_DAY=100 \
+MOCK_LOG_TENANTS=120 \
+npm run mock-data
+```
+
+Then index and run:
+
+```bash
+npm run index
+npm start
+```
+
+## Optional UI: MikroScope Console
+
+MikroScope works with the optional [MikroScope Console](https://github.com/mikaelvesavuori/mikroscope-console), a static web UI for exploring logs and correlations.
+
+Basic setup:
+
+1. Start MikroScope:
+
+```bash
+mikroscope serve --host 127.0.0.1 --port 4310 --logs ./logs --db ./data/mikroscope.db --cors-allow-origin http://127.0.0.1:4320
+```
+
+1. Install Console (from the console repo README):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mikaelvesavuori/mikroscope-console/main/install.sh -o install.sh && sh install.sh && rm install.sh
+```
+
+1. Set Console API target in `public/config.json`:
+
+```json
+{
+  "apiOrigin": "http://127.0.0.1:4310"
+}
+```
+
+1. Serve Console static files and open it:
+
+```bash
+npx http-server public -p 4320 -c-1
+```
+
+MikroScope endpoints used by Console:
+
+- `GET /api/logs`
+- `GET /api/logs/aggregate`
 
 ## CLI Commands
 
@@ -333,5 +412,5 @@ Use this only if you want to develop MikroScope itself.
 ```bash
 npm install
 npm run index
-npm run start
+npm start
 ```

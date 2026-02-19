@@ -237,9 +237,8 @@ async function main(): Promise<void> {
       `seed=${config.seed}`,
       "",
       "Next:",
-      "1) npm run mikroscope:index",
-      "2) npm run mikroscope:serve",
-      "3) npm run mikroscope-console:serve",
+      "1) npm run index",
+      "2) npm start",
     ].join("\n"),
   );
 }

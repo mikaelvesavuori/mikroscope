@@ -9,11 +9,16 @@
     "node": ">=24.0.0"
   },
   "keywords": [
-    "logging",
+    "nodejs",
     "observability",
+    "logging",
+    "log-sidecar",
+    "structured-logging",
     "ndjson",
     "sqlite",
-    "sidecar"
+    "monitoring",
+    "alerting",
+    "webhook"
   ],
   "bin": {
     "mikroscope": "dist/cli.mjs"
@@ -49,7 +54,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "mock-data": "tsx scripts/generate-mikroscope-mock-logs.ts",
-    "mock-data:quick": "MOCK_LOG_DAYS=7 MOCK_LOGS_PER_DAY=600 MOCK_AUDIT_LOGS_PER_DAY=80 MOCK_LOG_TENANTS=140 tsx scripts/generate-mikroscope-mock-logs.ts",
+    "mock-data:quick": "MOCK_LOG_DAYS=30 MOCK_LOGS_PER_DAY=30 MOCK_AUDIT_LOGS_PER_DAY=10 MOCK_LOG_TENANTS=20 tsx scripts/generate-mikroscope-mock-logs.ts",
     "release:assets": "bash scripts/create-release-assets.sh",
     "test:performance": "tsx tests/performance/run.perf.ts",
     "test:performance:quick": "PERF_MS_FILE_COUNT=20 PERF_MS_LOGS_PER_FILE=250 PERF_MS_APPEND_RECORDS=800 PERF_MS_QUERY_COUNT=120 PERF_MS_TENANT_COUNT=350 tsx tests/performance/run.perf.ts",
