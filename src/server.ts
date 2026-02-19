@@ -23,6 +23,7 @@ import {
 } from "node:https";
 import type { AddressInfo } from "node:net";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { LogQueryService } from "./application/services/LogQueryService.js";
 import {
@@ -779,7 +780,7 @@ function parseAggregateGroupBy(raw: string | null): LogAggregateGroupBy | undefi
 }
 
 function loadTextAsset(relativePath: string): { content: string; path: string } | undefined {
-  const moduleDirectory = typeof __dirname === "string" ? __dirname : process.cwd();
+  const moduleDirectory = dirname(fileURLToPath(import.meta.url));
   const candidates = [
     resolve(process.cwd(), relativePath),
     resolve(moduleDirectory, "..", relativePath),

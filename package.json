@@ -1,15 +1,23 @@
 {
   "name": "mikroscope",
-  "description": "Lightweight local log explorer for MikroLog logs",
-  "version": "0.1.0",
+  "description": "Lightweight log sidecar for NDJSON ingestion, query, and alerting",
+  "version": "0.0.1",
+  "type": "module",
   "author": "Mikael Vesavuori",
   "license": "MIT",
   "engines": {
     "node": ">=24.0.0"
   },
-  "keywords": [],
-  "main": "dist/index.js",
-  "module": "dist/index.mjs",
+  "keywords": [
+    "logging",
+    "observability",
+    "ndjson",
+    "sqlite",
+    "sidecar"
+  ],
+  "bin": {
+    "mikroscope": "dist/cli.mjs"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mikaelvesavuori/mikroscope"
@@ -19,12 +27,16 @@
   },
   "homepage": "https://github.com/mikaelvesavuori/mikroscope",
   "files": [
-    "/dist",
-    "!/dist/**/*.map",
-    "!/tests"
+    "dist",
+    "openapi",
+    "README.md",
+    "LICENSE",
+    "!dist/**/*.map",
+    "!tests"
   ],
   "scripts": {
     "build": "node esbuild.config.mjs --esm",
+    "prepack": "npm run build",
     "clean": "rm -rf dist/ lib/ *.zip *.tgz",
     "start": "tsx src/cli.ts serve",
     "index": "tsx src/cli.ts index",

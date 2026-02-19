@@ -4,10 +4,10 @@ This runbook covers day-2 operations for production deployments.
 
 ## Scope
 
-| Data type | Typical path | Recovery notes |
-| --- | --- | --- |
-| Raw logs (source of truth) | `./logs/**/*.ndjson` | Keep these protected/backed up |
-| SQLite index | `./data/mikroscope.db` (+ `-wal`, `-shm`) | Rebuildable from raw logs |
+| Data type                  | Typical path                              | Recovery notes                 |
+|----------------------------|-------------------------------------------|--------------------------------|
+| Raw logs (source of truth) | `./logs/**/*.ndjson`                      | Keep these protected/backed up |
+| SQLite index               | `./data/mikroscope.db` (+ `-wal`, `-shm`) | Rebuildable from raw logs      |
 
 ## Health checks
 
@@ -17,32 +17,32 @@ Primary health call:
 curl -sS http://127.0.0.1:4310/health | jq .
 ```
 
-| Field | Expected |
-| --- | --- |
-| `ok` | `true` |
-| `ingest.lastError` | empty |
-| `maintenance.lastError` | empty |
-| `alerting.lastError` | empty |
-| `storage.*FreeBytes` | above your operating threshold |
+| Field                   | Expected                       |
+|-------------------------|--------------------------------|
+| `ok`                    | `true`                         |
+| `ingest.lastError`      | empty                          |
+| `maintenance.lastError` | empty                          |
+| `alerting.lastError`    | empty                          |
+| `storage.*FreeBytes`    | above your operating threshold |
 
 ## Backup policy
 
 Minimum backup set:
 
-| Path | Required |
-| --- | --- |
-| `logs/` | Yes |
-| `logs/audit/` (if used) | Yes |
-| `data/mikroscope.db` | Yes |
-| `data/mikroscope.db-wal` (if present) | Yes |
-| `data/mikroscope.db-shm` (if present) | Yes |
+| Path                                  | Required |
+|---------------------------------------|----------|
+| `logs/`                               | Yes      |
+| `logs/audit/` (if used)               | Yes      |
+| `data/mikroscope.db`                  | Yes      |
+| `data/mikroscope.db-wal` (if present) | Yes      |
+| `data/mikroscope.db-shm` (if present) | Yes      |
 
 Recommended cadence:
 
-| Item | Cadence |
-| --- | --- |
-| Logs | Continuous replication or hourly snapshots |
-| SQLite index | Daily snapshot |
+| Item         | Cadence                                    |
+|--------------|--------------------------------------------|
+| Logs         | Continuous replication or hourly snapshots |
+| SQLite index | Daily snapshot                             |
 
 Snapshot example:
 
@@ -67,7 +67,7 @@ curl -sS -X POST http://127.0.0.1:4310/api/reindex \
   -H "Authorization: Bearer $MIKROSCOPE_API_TOKEN" | jq .
 ```
 
-5. Verify `/health` and sample `/api/logs` responses.
+1. Verify `/health` and sample `/api/logs` responses.
 
 ### Option B: restore logs + DB snapshot
 
@@ -80,10 +80,10 @@ curl -sS -X POST http://127.0.0.1:4310/api/reindex \
 
 ## Incident playbook
 
-| Symptom | Checks | Typical action |
-| --- | --- | --- |
+| Symptom                             | Checks                                                      | Typical action                                                   |
+|-------------------------------------|-------------------------------------------------------------|------------------------------------------------------------------|
 | API responds but no new logs appear | `/health` -> `ingest.lastError`, disk space, raw log writes | Fix ingest/disk issue, then run `/api/reindex` if index is stale |
-| Alert webhooks not delivering | `/health` -> `alerting.lastError`, webhook reachability | Fix webhook/network, then tune retry/timeout/backoff if needed |
+| Alert webhooks not delivering       | `/health` -> `alerting.lastError`, webhook reachability     | Fix webhook/network, then tune retry/timeout/backoff if needed   |
 
 ## Post-restore verification
 
@@ -93,8 +93,8 @@ curl -sS "http://127.0.0.1:4310/api/logs?limit=50" \
   -H "Authorization: Bearer $MIKROSCOPE_API_TOKEN" | jq .
 ```
 
-| Check | Expected |
-| --- | --- |
-| API errors | None |
-| Recent logs | Present |
+| Check             | Expected                                      |
+|-------------------|-----------------------------------------------|
+| API errors        | None                                          |
+| Recent logs       | Present                                       |
 | Pagination fields | `hasMore`, `limit`, `nextCursor` are coherent |

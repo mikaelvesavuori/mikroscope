@@ -26,7 +26,7 @@ const getConfig = () => {
     outdir: `dist`,
     external: [],
     banner: {
-      js: '// MikroScope - See LICENSE file for copyright and license details.'
+      js: '#!/usr/bin/env node\n// MikroScope - See LICENSE file for copyright and license details.'
     }
   };
 };
