@@ -55,6 +55,7 @@
     "typecheck": "tsc --noEmit",
     "mock-data": "tsx scripts/generate-mikroscope-mock-logs.ts",
     "mock-data:quick": "MOCK_LOG_DAYS=30 MOCK_LOGS_PER_DAY=30 MOCK_AUDIT_LOGS_PER_DAY=10 MOCK_LOG_TENANTS=20 tsx scripts/generate-mikroscope-mock-logs.ts",
+    "demo:alerts": "bash scripts/manual-alert-demo.sh",
     "release:assets": "bash scripts/create-release-assets.sh",
     "test:performance": "tsx tests/performance/run.perf.ts",
     "test:performance:quick": "PERF_MS_FILE_COUNT=20 PERF_MS_LOGS_PER_FILE=250 PERF_MS_APPEND_RECORDS=800 PERF_MS_QUERY_COUNT=120 PERF_MS_TENANT_COUNT=350 tsx tests/performance/run.perf.ts",
@@ -71,5 +72,8 @@
     "tsx": "4",
     "typescript": "5",
     "vitest": "4"
+  },
+  "dependencies": {
+    "mikroconf": "^1.0.0"
   }
 }

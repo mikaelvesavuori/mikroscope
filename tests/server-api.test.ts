@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
@@ -896,6 +896,194 @@ describe("MikroScope API sidecar", () => {
       expect(afterBody.entries[0].event).toBe("event.two");
     } finally {
       await running.close();
+    }
+  });
+
+  it("updates alert config remotely, persists it, and reloads it on restart", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "mikroscope-api-alert-config-"));
+    cleanupPaths.push(tempRoot);
+
+    const logsDir = join(tempRoot, "logs");
+    await mkdir(logsDir, { recursive: true });
+    const dbPath = join(tempRoot, "mikroscope.db");
+    const configPath = join(tempRoot, "mikroscope.alert-config.json");
+
+    const webhookServer = createServer((_req, res) => {
+      res.statusCode = 204;
+      res.end();
+    });
+    const webhookUrl = await new Promise<string>((resolve, reject) => {
+      webhookServer.once("error", reject);
+      webhookServer.listen(0, "127.0.0.1", () => {
+        const address = webhookServer.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Failed to bind webhook server"));
+          return;
+        }
+        resolve(`http://127.0.0.1:${address.port}/webhook`);
+      });
+    });
+
+    const running = await startMikroScopeServer({
+      apiToken: "secret-token",
+      attachSignalHandlers: false,
+      dbPath,
+      host: "127.0.0.1",
+      logsPath: logsDir,
+      minFreeBytes: 1,
+      port: 0,
+      protocol: "http",
+    });
+
+    try {
+      const unauthorized = await requestJson(new URL("/api/alerts/config", running.url));
+      expect(unauthorized.statusCode).toBe(401);
+
+      const updateResponse = await requestJson(new URL("/api/alerts/config", running.url), {
+        body: {
+          enabled: true,
+          webhookUrl,
+          intervalMs: 1_500,
+          windowMinutes: 7,
+          errorThreshold: 9_999,
+          noLogsThresholdMinutes: 0,
+          cooldownMs: 5_000,
+          webhookTimeoutMs: 1_000,
+          webhookRetryAttempts: 2,
+          webhookBackoffMs: 100,
+        },
+        headers: { authorization: "Bearer secret-token" },
+        method: "PUT",
+      });
+      expect(updateResponse.statusCode).toBe(200);
+      const updateBody = updateResponse.body as {
+        configPath: string;
+        policy: { intervalMs: number; webhookUrl?: string; windowMinutes: number };
+      };
+      expect(updateBody.configPath).toBe(configPath);
+      expect(updateBody.policy.webhookUrl).toBe(webhookUrl);
+      expect(updateBody.policy.intervalMs).toBe(1_500);
+      expect(updateBody.policy.windowMinutes).toBe(7);
+
+      const persistedRaw = await readFile(configPath, "utf8");
+      const persisted = JSON.parse(persistedRaw) as {
+        intervalMs: number;
+        webhookUrl?: string;
+        windowMinutes: number;
+      };
+      expect(persisted.webhookUrl).toBe(webhookUrl);
+      expect(persisted.intervalMs).toBe(1_500);
+      expect(persisted.windowMinutes).toBe(7);
+
+      const health = await requestJson(new URL("/health", running.url));
+      expect(health.statusCode).toBe(200);
+      const healthBody = health.body as { alertPolicy: { webhookUrl?: string } };
+      expect(healthBody.alertPolicy.webhookUrl).toBe("[configured]");
+    } finally {
+      await running.close();
+    }
+
+    const restarted = await startMikroScopeServer({
+      apiToken: "secret-token",
+      attachSignalHandlers: false,
+      alertIntervalMs: 30_000,
+      alertWebhookUrl: "",
+      dbPath,
+      host: "127.0.0.1",
+      logsPath: logsDir,
+      minFreeBytes: 1,
+      port: 0,
+      protocol: "http",
+    });
+
+    try {
+      const config = await requestJson(new URL("/api/alerts/config", restarted.url), {
+        headers: { authorization: "Bearer secret-token" },
+      });
+      expect(config.statusCode).toBe(200);
+      const configBody = config.body as {
+        configPath: string;
+        policy: { enabled: boolean; intervalMs: number; webhookUrl?: string; windowMinutes: number };
+      };
+      expect(configBody.configPath).toBe(configPath);
+      expect(configBody.policy.enabled).toBe(true);
+      expect(configBody.policy.webhookUrl).toBe(webhookUrl);
+      expect(configBody.policy.intervalMs).toBe(1_500);
+      expect(configBody.policy.windowMinutes).toBe(7);
+    } finally {
+      await restarted.close();
+      await new Promise<void>((resolve) => webhookServer.close(() => resolve()));
+    }
+  });
+
+  it("sends manual webhook test events via API", async () => {
+    const tempRoot = await mkdtemp(join(tmpdir(), "mikroscope-api-alert-test-webhook-"));
+    cleanupPaths.push(tempRoot);
+
+    const logsDir = join(tempRoot, "logs");
+    await mkdir(logsDir, { recursive: true });
+
+    const received: Array<{ details?: { message?: string }; rule?: string; source?: string }> = [];
+    const webhookServer = createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
+      req.on("end", () => {
+        const parsed = JSON.parse(Buffer.concat(chunks).toString("utf8")) as {
+          details?: { message?: string };
+          rule?: string;
+          source?: string;
+        };
+        received.push(parsed);
+        res.statusCode = 204;
+        res.end();
+      });
+    });
+    const webhookUrl = await new Promise<string>((resolve, reject) => {
+      webhookServer.once("error", reject);
+      webhookServer.listen(0, "127.0.0.1", () => {
+        const address = webhookServer.address();
+        if (!address || typeof address === "string") {
+          reject(new Error("Failed to bind webhook server"));
+          return;
+        }
+        resolve(`http://127.0.0.1:${address.port}/webhook`);
+      });
+    });
+
+    const running = await startMikroScopeServer({
+      apiToken: "secret-token",
+      attachSignalHandlers: false,
+      alertWebhookUrl: webhookUrl,
+      dbPath: join(tempRoot, "mikroscope.db"),
+      host: "127.0.0.1",
+      logsPath: logsDir,
+      minFreeBytes: 1,
+      port: 0,
+      protocol: "http",
+    });
+
+    try {
+      const response = await requestJson(new URL("/api/alerts/test-webhook", running.url), {
+        body: {},
+        headers: { authorization: "Bearer secret-token" },
+        method: "POST",
+      });
+      expect(response.statusCode).toBe(200);
+      const body = response.body as { ok: boolean; sentAt: string; targetUrl: string };
+      expect(body.ok).toBe(true);
+      expect(body.targetUrl).toBe(webhookUrl);
+      expect(typeof body.sentAt).toBe("string");
+
+      for (let i = 0; i < 20 && received.length === 0; i++) {
+        await wait(25);
+      }
+      expect(received.length).toBe(1);
+      expect(received[0].source).toBe("mikroscope");
+      expect(received[0].rule).toBe("manual_test");
+      expect(received[0].details?.message).toContain("Manual webhook test");
+    } finally {
+      await running.close();
+      await new Promise<void>((resolve) => webhookServer.close(() => resolve()));
     }
   });
 

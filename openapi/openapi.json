@@ -23,6 +23,9 @@
       "name": "Ingest"
     },
     {
+      "name": "Alerts"
+    },
+    {
       "name": "Logs"
     },
     {
@@ -213,6 +216,213 @@
                 },
                 "example": {
                   "error": "Payload too large. Max body size is 1048576 bytes."
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/alerts/config": {
+      "options": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "CORS preflight",
+        "operationId": "preflightAlertConfig",
+        "security": [
+
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Read active alert webhook policy",
+        "operationId": "getAlertConfig",
+        "security": [
+          {
+            "apiBearerAuth": [
+
+            ]
+          },
+          {
+            "basicAuth": [
+
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current policy and persisted config path",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertConfigResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Update alert webhook policy",
+        "operationId": "updateAlertConfig",
+        "description": "Applies the policy update immediately and persists it to disk, so settings survive restarts.\n",
+        "security": [
+          {
+            "apiBearerAuth": [
+
+            ]
+          },
+          {
+            "basicAuth": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertPolicyUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated policy persisted and active",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertConfigResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid policy payload or values",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/alerts/test-webhook": {
+      "options": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "CORS preflight",
+        "operationId": "preflightAlertTestWebhook",
+        "security": [
+
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Send a manual webhook test event",
+        "operationId": "testAlertWebhook",
+        "description": "Triggers a synthetic webhook event (`rule=manual_test`) using current policy settings.\nYou can optionally override `webhookUrl` without persisting changes.\n",
+        "security": [
+          {
+            "apiBearerAuth": [
+
+            ]
+          },
+          {
+            "basicAuth": [
+
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertWebhookTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Test event sent successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertWebhookTestResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid payload or webhook not configured/reachable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "413": {
+            "description": "Payload too large",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1114,7 +1324,7 @@
           },
           "webhookUrl": {
             "type": "string",
-            "description": "`[configured]` when configured, otherwise omitted."
+            "description": "Full webhook URL used for alert delivery."
           },
           "intervalMs": {
             "type": "number",
@@ -1147,6 +1357,121 @@
           "webhookBackoffMs": {
             "type": "number",
             "minimum": 0
+          }
+        }
+      },
+      "AlertPolicyMasked": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AlertPolicy"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "webhookUrl": {
+                "type": "string",
+                "description": "`[configured]` when configured, otherwise omitted."
+              }
+            }
+          }
+        ]
+      },
+      "AlertPolicyUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "webhookUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Set to `null` or empty string to clear."
+          },
+          "intervalMs": {
+            "type": "number",
+            "minimum": 1000
+          },
+          "windowMinutes": {
+            "type": "number",
+            "minimum": 1
+          },
+          "errorThreshold": {
+            "type": "number",
+            "minimum": 1
+          },
+          "noLogsThresholdMinutes": {
+            "type": "number",
+            "minimum": 0
+          },
+          "cooldownMs": {
+            "type": "number",
+            "minimum": 1000
+          },
+          "webhookTimeoutMs": {
+            "type": "number",
+            "minimum": 250
+          },
+          "webhookRetryAttempts": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "webhookBackoffMs": {
+            "type": "number",
+            "minimum": 25
+          }
+        }
+      },
+      "AlertConfigResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "configPath",
+          "policy"
+        ],
+        "properties": {
+          "configPath": {
+            "type": "string"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/AlertPolicy"
+          }
+        }
+      },
+      "AlertWebhookTestRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "webhookUrl": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional temporary override for the test request only."
+          }
+        }
+      },
+      "AlertWebhookTestResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "sentAt",
+          "targetUrl"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "targetUrl": {
+            "type": "string"
           }
         }
       },
@@ -1412,7 +1737,7 @@
             "$ref": "#/components/schemas/AlertState"
           },
           "alertPolicy": {
-            "$ref": "#/components/schemas/AlertPolicy"
+            "$ref": "#/components/schemas/AlertPolicyMasked"
           },
           "maintenance": {
             "$ref": "#/components/schemas/MaintenanceState"

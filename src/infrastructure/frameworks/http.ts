@@ -29,7 +29,7 @@ export function setCorsHeaders(
     res.setHeader("vary", "Origin");
   }
 
-  res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+  res.setHeader("access-control-allow-methods", "GET,POST,PUT,OPTIONS");
   res.setHeader("access-control-allow-headers", "authorization,content-type");
   res.setHeader("access-control-max-age", "600");
 }

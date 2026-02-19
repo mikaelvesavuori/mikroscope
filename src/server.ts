@@ -11,11 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import type { Server as HttpServer } from "node:http";
-import {
-  createServer as createHttpServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
+import { createServer as createHttpServer } from "node:http";
 import {
   createServer as createHttpsServer,
   type Server as HttpsServer,
@@ -24,23 +20,18 @@ import {
 import type { AddressInfo } from "node:net";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { handleRequest } from "./application/server/handleRequest.js";
 import { LogQueryService } from "./application/services/LogQueryService.js";
-import {
-  json,
-  parseAllowedOrigins,
-  readJsonBody,
-  setCorsHeaders,
-} from "./infrastructure/frameworks/http.js";
+import { json, parseAllowedOrigins } from "./infrastructure/frameworks/http.js";
 import { LogIndexer } from "./infrastructure/indexing/LogIndexer.js";
 import { LogDatabase } from "./infrastructure/persistence/LogDatabase.js";
-import type { LogAggregateGroupBy, LogQueryOptions } from "./interfaces/index.js";
 import {
-  type BasicAuthPolicy,
-  createBasicAuthPolicy,
-  isApiAuthorized,
-  resolveIngestProducerId,
-} from "./usecases/auth.js";
+  AlertingManager,
+  createAlertPolicy,
+  loadAlertPolicy,
+  resolveAlertConfigPath,
+} from "./usecases/alerting.js";
+import { type BasicAuthPolicy, createBasicAuthPolicy } from "./usecases/auth.js";
 import {
   createIngestAuthPolicy,
   createIngestPolicy,
@@ -48,21 +39,17 @@ import {
   createIngestQueueState,
   createIngestState,
   drainIngestQueue,
-  enqueueIngestQueueBatch,
-  flushIngestQueueBatch,
   type IngestAuthPolicy,
   type IngestPolicy,
   type IngestQueuePolicy,
   type IngestQueueState,
   type IngestState,
-  normalizeIngestRecord,
-  parseIngestPayload,
   runIncrementalIngest,
 } from "./usecases/ingest.js";
 
-type ServerProtocol = "http" | "https";
+export type ServerProtocol = "http" | "https";
 
-type StartMikroScopeServerOptions = {
+export type StartMikroScopeServerOptions = {
   dbPath: string;
   logsPath: string;
   port: number;
@@ -97,6 +84,7 @@ type StartMikroScopeServerOptions = {
   alertWebhookTimeoutMs?: number;
   alertWebhookRetryAttempts?: number;
   alertWebhookBackoffMs?: number;
+  alertConfigPath?: string;
 };
 
 export type RunningMikroScopeServer = {
@@ -107,11 +95,10 @@ export type RunningMikroScopeServer = {
   url: string;
 };
 
-type RequestContext = {
+export type RequestContext = {
   apiToken?: string;
   basicAuth: BasicAuthPolicy;
-  alertPolicy: AlertPolicy;
-  alerting: AlertState;
+  alerts: AlertingManager;
   corsAllowOrigins: string[];
   db: LogDatabase;
   ingest: IngestState;
@@ -179,51 +166,6 @@ type PreflightResult = {
   minFreeBytes: number;
 };
 
-type AlertPolicy = {
-  enabled: boolean;
-  webhookUrl?: string;
-  intervalMs: number;
-  windowMinutes: number;
-  errorThreshold: number;
-  noLogsThresholdMinutes: number;
-  cooldownMs: number;
-  webhookTimeoutMs: number;
-  webhookRetryAttempts: number;
-  webhookBackoffMs: number;
-};
-
-type AlertState = {
-  running: boolean;
-  runs: number;
-  sent: number;
-  suppressed: number;
-  lastRunAt?: string;
-  lastSuccessAt?: string;
-  lastDurationMs?: number;
-  lastError?: string;
-  lastTriggerAtByRule: Record<string, string>;
-};
-
-class AlertWebhookError extends Error {
-  readonly retryable: boolean;
-
-  constructor(message: string, retryable: boolean) {
-    super(message);
-    this.name = "AlertWebhookError";
-    this.retryable = retryable;
-  }
-}
-
-function toNumber(value: string | null, fallback: number, max?: number): number {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  if (typeof max === "number") {
-    return Math.min(max, parsed);
-  }
-  return parsed;
-}
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_DB_RETENTION_DAYS = 30;
 const DEFAULT_DB_AUDIT_RETENTION_DAYS = 365;
@@ -231,15 +173,6 @@ const DEFAULT_LOG_RETENTION_DAYS = 30;
 const DEFAULT_LOG_AUDIT_RETENTION_DAYS = 365;
 const DEFAULT_MAINTENANCE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const DEFAULT_MIN_FREE_BYTES = 256 * 1024 * 1024;
-const DEFAULT_ALERT_INTERVAL_MS = 30_000;
-const DEFAULT_ALERT_WINDOW_MINUTES = 5;
-const DEFAULT_ALERT_ERROR_THRESHOLD = 20;
-const DEFAULT_ALERT_NO_LOGS_THRESHOLD_MINUTES = 0;
-const DEFAULT_ALERT_COOLDOWN_MS = 5 * 60 * 1000;
-const DEFAULT_ALERT_WEBHOOK_TIMEOUT_MS = 5_000;
-const DEFAULT_ALERT_WEBHOOK_RETRY_ATTEMPTS = 3;
-const DEFAULT_ALERT_WEBHOOK_BACKOFF_MS = 250;
-const MAX_QUERY_LIMIT = 1_000;
 const OPENAPI_JSON_RELATIVE_PATH = join("openapi", "openapi.json");
 const OPENAPI_SPEC_RELATIVE_PATH = join("openapi", "openapi.yaml");
 
@@ -334,88 +267,6 @@ function createMaintenanceState(): MaintenanceState {
     fieldsDeletedLastRun: 0,
     fieldsDeletedTotal: 0,
     vacuumRuns: 0,
-  };
-}
-
-function createAlertPolicy(options: StartMikroScopeServerOptions): AlertPolicy {
-  const rawWebhookUrl = options.alertWebhookUrl ?? process.env.MIKROSCOPE_ALERT_WEBHOOK_URL;
-  const webhookUrl =
-    typeof rawWebhookUrl === "string" && rawWebhookUrl.trim().length > 0
-      ? rawWebhookUrl.trim()
-      : undefined;
-
-  return {
-    enabled: Boolean(webhookUrl),
-    webhookUrl,
-    intervalMs: Math.max(
-      1_000,
-      parsePositiveNumber(
-        options.alertIntervalMs ?? process.env.MIKROSCOPE_ALERT_INTERVAL_MS,
-        DEFAULT_ALERT_INTERVAL_MS,
-      ),
-    ),
-    windowMinutes: Math.max(
-      1,
-      parsePositiveNumber(
-        options.alertWindowMinutes ?? process.env.MIKROSCOPE_ALERT_WINDOW_MINUTES,
-        DEFAULT_ALERT_WINDOW_MINUTES,
-      ),
-    ),
-    errorThreshold: Math.max(
-      1,
-      parsePositiveNumber(
-        options.alertErrorThreshold ?? process.env.MIKROSCOPE_ALERT_ERROR_THRESHOLD,
-        DEFAULT_ALERT_ERROR_THRESHOLD,
-      ),
-    ),
-    noLogsThresholdMinutes: Math.max(
-      0,
-      parsePositiveNumber(
-        options.alertNoLogsThresholdMinutes ??
-          process.env.MIKROSCOPE_ALERT_NO_LOGS_THRESHOLD_MINUTES,
-        DEFAULT_ALERT_NO_LOGS_THRESHOLD_MINUTES,
-      ),
-    ),
-    cooldownMs: Math.max(
-      1_000,
-      parsePositiveNumber(
-        options.alertCooldownMs ?? process.env.MIKROSCOPE_ALERT_COOLDOWN_MS,
-        DEFAULT_ALERT_COOLDOWN_MS,
-      ),
-    ),
-    webhookTimeoutMs: Math.max(
-      250,
-      parsePositiveNumber(
-        options.alertWebhookTimeoutMs ?? process.env.MIKROSCOPE_ALERT_WEBHOOK_TIMEOUT_MS,
-        DEFAULT_ALERT_WEBHOOK_TIMEOUT_MS,
-      ),
-    ),
-    webhookRetryAttempts: Math.max(
-      1,
-      Math.trunc(
-        parsePositiveNumber(
-          options.alertWebhookRetryAttempts ?? process.env.MIKROSCOPE_ALERT_WEBHOOK_RETRY_ATTEMPTS,
-          DEFAULT_ALERT_WEBHOOK_RETRY_ATTEMPTS,
-        ),
-      ),
-    ),
-    webhookBackoffMs: Math.max(
-      25,
-      parsePositiveNumber(
-        options.alertWebhookBackoffMs ?? process.env.MIKROSCOPE_ALERT_WEBHOOK_BACKOFF_MS,
-        DEFAULT_ALERT_WEBHOOK_BACKOFF_MS,
-      ),
-    ),
-  };
-}
-
-function createAlertState(): AlertState {
-  return {
-    running: false,
-    runs: 0,
-    sent: 0,
-    suppressed: 0,
-    lastTriggerAtByRule: {},
   };
 }
 
@@ -591,194 +442,6 @@ function runMaintenance(
   }
 }
 
-function shouldRetryWebhookStatus(status: number): boolean {
-  return status === 408 || status === 429 || status >= 500;
-}
-
-function waitMs(durationMs: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, durationMs);
-  });
-}
-
-async function sendAlertWebhook(url: string, payload: unknown, policy: AlertPolicy): Promise<void> {
-  let lastError: AlertWebhookError | undefined;
-  for (let attempt = 1; attempt <= policy.webhookRetryAttempts; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, policy.webhookTimeoutMs);
-
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json; charset=utf-8",
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      if (response.ok) return;
-
-      const body = await response.text().catch(() => "");
-      const snippet = body.slice(0, 240);
-      throw new AlertWebhookError(
-        `Alert webhook failed (${response.status})${snippet ? `: ${snippet}` : ""}`,
-        shouldRetryWebhookStatus(response.status),
-      );
-    } catch (error) {
-      const reason: AlertWebhookError =
-        error instanceof AlertWebhookError
-          ? error
-          : error instanceof Error && error.name === "AbortError"
-            ? new AlertWebhookError(
-                `Alert webhook timeout after ${policy.webhookTimeoutMs}ms`,
-                true,
-              )
-            : error instanceof Error
-              ? new AlertWebhookError(error.message, true)
-              : new AlertWebhookError(String(error), true);
-
-      if (!reason.retryable || attempt >= policy.webhookRetryAttempts) {
-        throw reason;
-      }
-
-      lastError = reason;
-    } finally {
-      clearTimeout(timeout);
-    }
-
-    const delayMs = Math.round(policy.webhookBackoffMs * 2 ** (attempt - 1));
-    await waitMs(delayMs);
-  }
-
-  throw lastError || new AlertWebhookError("Alert webhook failed after retries", false);
-}
-
-async function runAlerting(
-  context: Pick<RequestContext, "alertPolicy" | "alerting" | "queryService" | "url">,
-): Promise<void> {
-  if (!context.alertPolicy.enabled || !context.alertPolicy.webhookUrl) return;
-  if (context.alerting.running) return;
-
-  context.alerting.running = true;
-  context.alerting.runs++;
-  context.alerting.lastRunAt = new Date().toISOString();
-  const nowMs = Date.now();
-  const started = performance.now();
-
-  try {
-    const windowStartIso = new Date(
-      nowMs - context.alertPolicy.windowMinutes * 60_000,
-    ).toISOString();
-    const errorCount = context.queryService.countLogs({
-      from: windowStartIso,
-      level: "ERROR",
-    });
-    const totalWindowCount = context.queryService.countLogs({
-      from: windowStartIso,
-    });
-
-    const triggers: Array<{
-      details: Record<string, unknown>;
-      rule: string;
-      severity: "warning" | "critical";
-    }> = [];
-
-    if (errorCount >= context.alertPolicy.errorThreshold) {
-      triggers.push({
-        rule: "error_threshold",
-        severity: "critical",
-        details: {
-          errorCount,
-          threshold: context.alertPolicy.errorThreshold,
-          totalWindowCount,
-          windowMinutes: context.alertPolicy.windowMinutes,
-        },
-      });
-    }
-
-    if (context.alertPolicy.noLogsThresholdMinutes > 0) {
-      const noLogsStartIso = new Date(
-        nowMs - context.alertPolicy.noLogsThresholdMinutes * 60_000,
-      ).toISOString();
-      const noLogsCount = context.queryService.countLogs({ from: noLogsStartIso });
-      if (noLogsCount === 0) {
-        triggers.push({
-          rule: "no_logs",
-          severity: "warning",
-          details: {
-            thresholdMinutes: context.alertPolicy.noLogsThresholdMinutes,
-          },
-        });
-      }
-    }
-
-    for (const trigger of triggers) {
-      const lastSentIso = context.alerting.lastTriggerAtByRule[trigger.rule];
-      const lastSentMs = lastSentIso ? Date.parse(lastSentIso) : NaN;
-      if (Number.isFinite(lastSentMs) && nowMs - lastSentMs < context.alertPolicy.cooldownMs) {
-        context.alerting.suppressed++;
-        continue;
-      }
-
-      await sendAlertWebhook(
-        context.alertPolicy.webhookUrl,
-        {
-          source: "mikroscope",
-          rule: trigger.rule,
-          severity: trigger.severity,
-          triggeredAt: new Date(nowMs).toISOString(),
-          serviceUrl: context.url,
-          details: trigger.details,
-        },
-        context.alertPolicy,
-      );
-
-      const sentAtIso = new Date().toISOString();
-      context.alerting.lastTriggerAtByRule[trigger.rule] = sentAtIso;
-      context.alerting.sent++;
-    }
-
-    context.alerting.lastSuccessAt = new Date().toISOString();
-    context.alerting.lastError = undefined;
-  } catch (error) {
-    context.alerting.lastError = error instanceof Error ? error.message : String(error);
-  } finally {
-    context.alerting.lastDurationMs = Number((performance.now() - started).toFixed(2));
-    context.alerting.running = false;
-  }
-}
-
-function parseQueryOptions(requestUrl: URL): LogQueryOptions {
-  const auditValue = requestUrl.searchParams.get("audit");
-  const audit =
-    auditValue === null
-      ? undefined
-      : auditValue.toLowerCase() === "true" || auditValue === "1"
-        ? true
-        : auditValue.toLowerCase() === "false" || auditValue === "0"
-          ? false
-          : undefined;
-
-  return {
-    audit,
-    cursor: requestUrl.searchParams.get("cursor") || undefined,
-    field: requestUrl.searchParams.get("field") || undefined,
-    from: requestUrl.searchParams.get("from") || undefined,
-    level: requestUrl.searchParams.get("level") || undefined,
-    limit: toNumber(requestUrl.searchParams.get("limit"), 100, MAX_QUERY_LIMIT),
-    to: requestUrl.searchParams.get("to") || undefined,
-    value: requestUrl.searchParams.get("value") || undefined,
-  };
-}
-
-function parseAggregateGroupBy(raw: string | null): LogAggregateGroupBy | undefined {
-  if (raw === "level" || raw === "event" || raw === "field" || raw === "correlation") return raw;
-  return undefined;
-}
-
 function loadTextAsset(relativePath: string): { content: string; path: string } | undefined {
   const moduleDirectory = dirname(fileURLToPath(import.meta.url));
   const candidates = [
@@ -806,342 +469,6 @@ function loadOpenApiSpec(): { content: string; path: string } | undefined {
 
 function loadOpenApiJson(): { content: string; path: string } | undefined {
   return loadTextAsset(OPENAPI_JSON_RELATIVE_PATH);
-}
-
-function renderScalarApiReferenceHtml(specPath: string): string {
-  return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MikroScope API Docs</title>
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-      }
-      #app {
-        width: 100%;
-        height: 100%;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="app" style="font-family: system-ui, sans-serif; padding: 12px 16px;">
-      <h1 style="margin: 0 0 6px;">MikroScope API Docs</h1>
-      <p style="margin: 0;">
-        Loading interactive docs. If this page remains plain, open
-        <a href="${specPath}">${specPath}</a>.
-      </p>
-    </div>
-    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
-    <script>
-      if (typeof Scalar !== "undefined" && typeof Scalar.createApiReference === "function") {
-        Scalar.createApiReference("#app", { url: "${specPath}" });
-      }
-    </script>
-  </body>
-</html>`;
-}
-
-async function handleRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
-  context: RequestContext,
-): Promise<void> {
-  const requestUrl = new URL(req.url || "/", `${context.protocol}://localhost`);
-  setCorsHeaders(req, res, context.corsAllowOrigins);
-
-  if (
-    req.method === "OPTIONS" &&
-    (requestUrl.pathname === "/health" ||
-      requestUrl.pathname === "/openapi.json" ||
-      requestUrl.pathname === "/openapi.yaml" ||
-      requestUrl.pathname === "/docs" ||
-      requestUrl.pathname === "/docs/" ||
-      requestUrl.pathname.startsWith("/api/"))
-  ) {
-    res.statusCode = 204;
-    res.end();
-    return;
-  }
-
-  if (requestUrl.pathname === "/openapi.yaml" && req.method === "GET") {
-    if (!context.openApiSpec) {
-      return json(
-        req,
-        res,
-        404,
-        { error: "OpenAPI specification not found." },
-        context.corsAllowOrigins,
-      );
-    }
-
-    setCorsHeaders(req, res, context.corsAllowOrigins);
-    res.statusCode = 200;
-    res.setHeader("content-type", "application/yaml; charset=utf-8");
-    res.end(context.openApiSpec.content);
-    return;
-  }
-
-  if (requestUrl.pathname === "/openapi.json" && req.method === "GET") {
-    if (!context.openApiJson) {
-      return json(
-        req,
-        res,
-        404,
-        { error: "OpenAPI JSON document not found." },
-        context.corsAllowOrigins,
-      );
-    }
-
-    setCorsHeaders(req, res, context.corsAllowOrigins);
-    res.statusCode = 200;
-    res.setHeader("content-type", "application/json; charset=utf-8");
-    res.end(context.openApiJson.content);
-    return;
-  }
-
-  if (
-    (requestUrl.pathname === "/docs" || requestUrl.pathname === "/docs/") &&
-    req.method === "GET"
-  ) {
-    if (!context.openApiSpec && !context.openApiJson) {
-      return json(
-        req,
-        res,
-        404,
-        { error: "OpenAPI document not found." },
-        context.corsAllowOrigins,
-      );
-    }
-
-    const docsSpecPath = context.openApiJson ? "/openapi.json" : "/openapi.yaml";
-    setCorsHeaders(req, res, context.corsAllowOrigins);
-    res.statusCode = 200;
-    res.setHeader("content-type", "text/html; charset=utf-8");
-    res.end(renderScalarApiReferenceHtml(docsSpecPath));
-    return;
-  }
-
-  if (requestUrl.pathname === "/health") {
-    const dbStats = context.db.getStats();
-    const dbDirectoryFreeBytes = assertMinimumFreeSpace(
-      context.preflight.dbDirectory,
-      1,
-      "dbDirectory",
-    );
-    const logsDirectoryFreeBytes = assertMinimumFreeSpace(
-      context.preflight.logsDirectory,
-      1,
-      "logsDirectory",
-    );
-    return json(
-      req,
-      res,
-      200,
-      {
-        ok: true,
-        service: "mikroscope",
-        uptimeSec: Number(((Date.now() - context.startedAtMs) / 1000).toFixed(2)),
-        ingest: context.ingest,
-        auth: {
-          apiTokenEnabled: Boolean(context.apiToken),
-          basicEnabled: context.basicAuth.enabled,
-        },
-        ingestPolicy: context.ingestPolicy,
-        ingestEndpoint: {
-          enabled: context.ingestAuthPolicy.enabled || context.basicAuth.enabled,
-          maxBodyBytes: context.ingestAuthPolicy.maxBodyBytes,
-          producerCount: context.ingestAuthPolicy.producerByToken.size,
-          queue: {
-            enabled: context.ingestQueuePolicy.enabled,
-            flushMs: context.ingestQueuePolicy.flushMs,
-            draining: context.ingestQueueState.draining,
-            pendingBatches: context.ingestQueueState.pending.length,
-            pendingRecords: context.ingestQueueState.pendingRecords,
-            recordsFlushed: context.ingestQueueState.recordsFlushed,
-            recordsQueued: context.ingestQueueState.recordsQueued,
-            lastError: context.ingestQueueState.lastError,
-            lastFlushAt: context.ingestQueueState.lastFlushAt,
-          },
-        },
-        alerting: context.alerting,
-        alertPolicy: {
-          ...context.alertPolicy,
-          webhookUrl: context.alertPolicy.webhookUrl ? "[configured]" : undefined,
-        },
-        maintenance: context.maintenance,
-        retentionDays: {
-          db: context.maintenancePolicy.dbRetentionDays,
-          dbAudit: context.maintenancePolicy.dbAuditRetentionDays,
-          logs: context.maintenancePolicy.logRetentionDays,
-          logsAudit: context.maintenancePolicy.logAuditRetentionDays,
-        },
-        backup: {
-          auditDirectory: context.maintenancePolicy.auditBackupDirectory,
-        },
-        storage: {
-          dbApproximateSizeBytes: dbStats.approximateSizeBytes,
-          dbDirectoryFreeBytes,
-          logsDirectoryFreeBytes,
-          minFreeBytes: context.preflight.minFreeBytes,
-        },
-      },
-      context.corsAllowOrigins,
-    );
-  }
-
-  if (requestUrl.pathname === "/api/ingest" && req.method === "POST") {
-    if (!context.ingestAuthPolicy.enabled && !context.basicAuth.enabled) {
-      return json(
-        req,
-        res,
-        404,
-        { error: "Ingest endpoint is not enabled." },
-        context.corsAllowOrigins,
-      );
-    }
-
-    const producerId = resolveIngestProducerId(
-      req,
-      context.basicAuth,
-      context.ingestAuthPolicy.producerByToken,
-    );
-    if (!producerId) {
-      return json(req, res, 401, { error: "Unauthorized" }, context.corsAllowOrigins);
-    }
-
-    let payload: unknown;
-    try {
-      payload = await readJsonBody(req, context.ingestAuthPolicy.maxBodyBytes);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      const status = message.startsWith("Payload too large") ? 413 : 400;
-      return json(req, res, status, { error: message }, context.corsAllowOrigins);
-    }
-
-    const logs = parseIngestPayload(payload);
-    if (!logs) {
-      return json(
-        req,
-        res,
-        400,
-        { error: "Invalid ingest payload. Expected an array or an object with a logs array." },
-        context.corsAllowOrigins,
-      );
-    }
-
-    const receivedAt = new Date().toISOString();
-    const accepted: Array<Record<string, unknown>> = [];
-    let rejected = 0;
-
-    for (const log of logs) {
-      const normalized = normalizeIngestRecord(log, producerId, receivedAt);
-      if (!normalized) {
-        rejected++;
-        continue;
-      }
-      accepted.push(normalized);
-    }
-
-    let queued = false;
-    if (accepted.length > 0) {
-      if (context.ingestQueuePolicy.enabled) {
-        enqueueIngestQueueBatch(context, { producerId, records: accepted });
-        queued = true;
-      } else {
-        await flushIngestQueueBatch(context, [{ producerId, records: accepted }]);
-      }
-    }
-
-    return json(
-      req,
-      res,
-      queued ? 202 : 200,
-      {
-        accepted: accepted.length,
-        queued,
-        producerId,
-        receivedAt,
-        rejected,
-      },
-      context.corsAllowOrigins,
-    );
-  }
-
-  if (
-    requestUrl.pathname.startsWith("/api/") &&
-    !isApiAuthorized(req, context.apiToken, context.basicAuth)
-  ) {
-    return json(req, res, 401, { error: "Unauthorized" }, context.corsAllowOrigins);
-  }
-
-  if (requestUrl.pathname === "/api/reindex" && req.method === "POST") {
-    context.indexer.resetIncrementalState();
-    const reset = context.db.reset();
-    const report = await context.indexer.indexDirectory(context.logsPath);
-    return json(req, res, 200, { report, reset }, context.corsAllowOrigins);
-  }
-
-  if (requestUrl.pathname === "/api/logs" && req.method === "GET") {
-    const page = context.queryService.queryLogsPage(parseQueryOptions(requestUrl));
-    return json(req, res, 200, page, context.corsAllowOrigins);
-  }
-
-  if (requestUrl.pathname === "/api/logs/aggregate" && req.method === "GET") {
-    const groupBy = parseAggregateGroupBy(requestUrl.searchParams.get("groupBy"));
-    if (!groupBy) {
-      return json(
-        req,
-        res,
-        400,
-        { error: "Invalid groupBy. Expected level, event, field, or correlation." },
-        context.corsAllowOrigins,
-      );
-    }
-    const groupField = requestUrl.searchParams.get("groupField") || undefined;
-    if (groupBy === "field" && (!groupField || groupField.trim().length === 0)) {
-      return json(
-        req,
-        res,
-        400,
-        { error: "Missing required groupField when groupBy=field." },
-        context.corsAllowOrigins,
-      );
-    }
-
-    const options = parseQueryOptions(requestUrl);
-    const buckets = context.queryService.aggregateLogs(
-      {
-        audit: options.audit,
-        field: options.field,
-        from: options.from,
-        level: options.level,
-        limit: options.limit,
-        to: options.to,
-        value: options.value,
-      },
-      groupBy,
-      groupField,
-    );
-
-    return json(
-      req,
-      res,
-      200,
-      {
-        buckets,
-        groupBy,
-        groupField,
-      },
-      context.corsAllowOrigins,
-    );
-  }
-
-  json(req, res, 404, { error: "Not found" }, context.corsAllowOrigins);
 }
 
 function createServerForProtocol(
@@ -1203,8 +530,9 @@ export async function startMikroScopeServer(
   const ingestQueuePolicy = createIngestQueuePolicy(options);
   const ingest = createIngestState();
   const ingestQueueState = createIngestQueueState();
-  const alertPolicy = createAlertPolicy(options);
-  const alerting = createAlertState();
+  const baseAlertPolicy = createAlertPolicy(options);
+  const alertConfigPath = resolveAlertConfigPath(options.dbPath, options.alertConfigPath);
+  const alertPolicy = loadAlertPolicy(alertConfigPath, baseAlertPolicy);
   const maintenancePolicy = createMaintenancePolicy(options);
   const maintenance = createMaintenanceState();
   const openApiJson = loadOpenApiJson();
@@ -1220,12 +548,18 @@ export async function startMikroScopeServer(
   });
 
   const server = createServerForProtocol(protocol, options.tlsCertPath, options.tlsKeyPath);
+  let serviceUrl = `${protocol}://${host}:${options.port}`;
+  const alerts = new AlertingManager({
+    configPath: alertConfigPath,
+    policy: alertPolicy,
+    queryService,
+    resolveServiceUrl: () => serviceUrl,
+  });
 
   const context: RequestContext = {
     apiToken: options.apiToken,
     basicAuth,
-    alertPolicy,
-    alerting,
+    alerts,
     corsAllowOrigins: parseAllowedOrigins(
       options.corsAllowOrigin ?? process.env.MIKROSCOPE_CORS_ALLOW_ORIGIN,
     ),
@@ -1245,7 +579,7 @@ export async function startMikroScopeServer(
     indexer,
     queryService,
     startedAtMs: Date.now(),
-    url: `${protocol}://${host}:${options.port}`,
+    url: serviceUrl,
   };
 
   runMaintenance(context, maintenancePolicy);
@@ -1262,13 +596,6 @@ export async function startMikroScopeServer(
     : undefined;
   ingestInterval?.unref();
 
-  const alertInterval = alertPolicy.enabled
-    ? setInterval(() => {
-        void runAlerting(context);
-      }, alertPolicy.intervalMs)
-    : undefined;
-  alertInterval?.unref();
-
   server.on("request", (req, res) => {
     handleRequest(req, res, context).catch((error) => {
       json(
@@ -1283,15 +610,14 @@ export async function startMikroScopeServer(
 
   const bound = await listen(server, host, options.port);
   const url = `${protocol}://${bound.host}:${bound.port}`;
+  serviceUrl = url;
   context.url = url;
-  if (alertPolicy.enabled) {
-    void runAlerting(context);
-  }
+  alerts.start();
 
   const close = async () => {
     clearInterval(maintenanceInterval);
     if (ingestInterval) clearInterval(ingestInterval);
-    if (alertInterval) clearInterval(alertInterval);
+    alerts.stop();
     await new Promise<void>((resolve) => {
       server.close(() => resolve());
     });

@@ -125,6 +125,63 @@ curl -sS "http://127.0.0.1:4310/api/logs?field=producerId&value=backend-api&limi
 
 If `/docs` is blank (for example blocked CDN scripts), use `/openapi.json` directly.
 
+## Configuration Inputs
+
+`mikroscope serve`, `mikroscope index`, `mikroscope query`, and `mikroscope aggregate` resolve configuration with layered precedence:
+
+1. Built-in defaults
+1. JSON config file (`--config` or `MIKROSCOPE_CONFIG_PATH`; default: `./mikroscope.config.json` if present)
+1. Environment variables (`MIKROSCOPE_*`)
+1. Direct CLI flags (highest precedence)
+
+Example `mikroscope.config.json`:
+
+```json
+{
+  "dbPath": "./data/mikroscope.db",
+  "logsPath": "./logs",
+  "host": "127.0.0.1",
+  "port": 4310,
+  "protocol": "http",
+  "apiToken": "api-token-123",
+  "ingestProducers": "backend-token=backend-api,frontend-token=frontend-web",
+  "ingestAsyncQueue": true,
+  "alertWebhookUrl": "https://example.com/webhook"
+}
+```
+
+Use it:
+
+```bash
+mikroscope serve --config ./mikroscope.config.json
+```
+
+Env-only example:
+
+```bash
+MIKROSCOPE_DB_PATH=./data/mikroscope.db \
+MIKROSCOPE_LOGS_PATH=./logs \
+MIKROSCOPE_PORT=4310 \
+MIKROSCOPE_API_TOKEN=api-token-123 \
+mikroscope serve
+```
+
+Programmatic usage with direct params:
+
+```ts
+import { resolveMikroScopeServerOptions } from "./src/application/config/resolveMikroScopeServerOptions.js";
+import { startMikroScopeServer } from "./src/server.js";
+
+const options = resolveMikroScopeServerOptions({
+  configFilePath: "./mikroscope.config.json",
+  overrides: {
+    port: 4320
+  }
+});
+
+await startMikroScopeServer(options);
+```
+
 ## Generate Mock Data
 
 If you want realistic logs to inspect quickly, generate synthetic NDJSON files from a source checkout of this repository.
@@ -203,8 +260,87 @@ npx http-server public -p 4320 -c-1
 
 MikroScope endpoints used by Console:
 
+- `GET /health`
 - `GET /api/logs`
 - `GET /api/logs/aggregate`
+- `GET /api/alerts/config`
+- `PUT /api/alerts/config`
+- `POST /api/alerts/test-webhook`
+
+## Manual Webhook Alert Demo
+
+If you want to manually experience alerting (not test runner output), use the helper script:
+
+```bash
+# Start demo in error-threshold mode
+npm run demo:alerts -- up error
+
+# Trigger ERROR logs (should fire webhook)
+npm run demo:alerts -- trigger-error
+
+# Check alerting state from /health
+npm run demo:alerts -- status
+
+# Inspect recent webhook + server logs
+npm run demo:alerts -- logs
+
+# Stop demo
+npm run demo:alerts -- down
+```
+
+No-logs mode:
+
+```bash
+npm run demo:alerts -- up nologs
+```
+
+Then wait ~60-70 seconds without sending logs and check `npm run demo:alerts -- logs` for a `rule: "no_logs"` webhook.
+
+## Remote Alert Configuration
+
+Alert config can be managed over API and is persisted to disk so it survives restarts/reboots.
+
+Default config file path:
+
+- `<db-directory>/mikroscope.alert-config.json`
+
+Override path:
+
+- CLI: `--alert-config-path /path/to/mikroscope.alert-config.json`
+- Env: `MIKROSCOPE_ALERT_CONFIG_PATH=/path/to/mikroscope.alert-config.json`
+
+Examples:
+
+```bash
+# Read current policy
+curl -sS "http://127.0.0.1:4310/api/alerts/config" \
+  -H "Authorization: Bearer api-token-123"
+
+# Update and persist policy
+curl -sS "http://127.0.0.1:4310/api/alerts/config" \
+  -H "Authorization: Bearer api-token-123" \
+  -H "Content-Type: application/json" \
+  -X PUT \
+  --data '{
+    "enabled": true,
+    "webhookUrl": "https://example.com/webhook",
+    "intervalMs": 30000,
+    "windowMinutes": 5,
+    "errorThreshold": 20,
+    "noLogsThresholdMinutes": 0,
+    "cooldownMs": 300000,
+    "webhookTimeoutMs": 5000,
+    "webhookRetryAttempts": 3,
+    "webhookBackoffMs": 250
+  }'
+
+# Send a manual test webhook event
+curl -sS "http://127.0.0.1:4310/api/alerts/test-webhook" \
+  -H "Authorization: Bearer api-token-123" \
+  -H "Content-Type: application/json" \
+  -X POST \
+  --data '{}'
+```
 
 ## CLI Commands
 
@@ -222,6 +358,9 @@ MikroScope endpoints used by Console:
 | `POST /api/ingest`        | `Bearer <ingest-token>` mapped by `--ingest-producers`, or Basic auth if configured | Always server-assigned. Incoming `producerId` in payload is ignored/overridden. |
 | `GET /api/logs`           | `Bearer <api-token>` and/or Basic auth (if enabled)                                 | N/A                                                                             |
 | `GET /api/logs/aggregate` | `Bearer <api-token>` and/or Basic auth (if enabled)                                 | N/A                                                                             |
+| `GET /api/alerts/config`  | `Bearer <api-token>` and/or Basic auth (if enabled)                                 | N/A                                                                             |
+| `PUT /api/alerts/config`  | `Bearer <api-token>` and/or Basic auth (if enabled)                                 | N/A                                                                             |
+| `POST /api/alerts/test-webhook` | `Bearer <api-token>` and/or Basic auth (if enabled)                          | N/A                                                                             |
 | `POST /api/reindex`       | `Bearer <api-token>` and/or Basic auth (if enabled)                                 | N/A                                                                             |
 
 Notes:
@@ -250,6 +389,9 @@ Notes:
 |--------|-----------------------|-------------------------------------------|------------------------------------------|
 | `GET`  | `/health`             | None                                      | Runtime health and policy/status details |
 | `POST` | `/api/ingest`         | Ingest bearer token mapping or Basic auth | Accept and persist inbound logs          |
+| `GET`  | `/api/alerts/config`  | API bearer token and/or Basic auth        | Read active alert policy + config path   |
+| `PUT`  | `/api/alerts/config`  | API bearer token and/or Basic auth        | Update and persist alert policy          |
+| `POST` | `/api/alerts/test-webhook` | API bearer token and/or Basic auth   | Send manual webhook test event           |
 | `GET`  | `/api/logs`           | API bearer token and/or Basic auth        | Paginated log query                      |
 | `GET`  | `/api/logs/aggregate` | API bearer token and/or Basic auth        | Bucketed counts                          |
 | `POST` | `/api/reindex`        | API bearer token and/or Basic auth        | Full DB reset + reindex from logs        |
@@ -286,8 +428,10 @@ Query parameters for `/api/logs/aggregate`:
 |-----------------------|------------------------|------------------------------------------------|
 | `--logs`              | `./logs`               | NDJSON root directory                          |
 | `--db`                | `./data/mikroscope.db` | SQLite database file                           |
+| `--config`            | `./mikroscope.config.json` | JSON config file path (if present)         |
 | `--host`              | `127.0.0.1`            | Bind host                                      |
 | `--port`              | `4310`                 | Bind port                                      |
+| `--protocol`          | `http`                 | Listener protocol (`http` or `https`)          |
 | `--https`             | `false`                | Enable HTTPS listener                          |
 | `--tls-cert`          | none                   | TLS certificate path (required with `--https`) |
 | `--tls-key`           | none                   | TLS key path (required with `--https`)         |
@@ -332,6 +476,7 @@ Query parameters for `/api/logs/aggregate`:
 | `--alert-webhook-timeout-ms`        | `5000`   | Webhook timeout per request                     |
 | `--alert-webhook-retry-attempts`    | `3`      | Webhook retry attempts per alert                |
 | `--alert-webhook-backoff-ms`        | `250`    | Base backoff between webhook retries            |
+| `--alert-config-path`               | db dir   | Path to persisted alert config JSON             |
 
 ## Example Integrations
 

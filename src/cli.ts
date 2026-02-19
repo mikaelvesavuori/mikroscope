@@ -1,3 +1,7 @@
+import {
+  resolveMikroScopeServerOptions,
+  resolveServerConfigFilePath,
+} from "./application/config/resolveMikroScopeServerOptions.js";
 import { LogQueryService } from "./application/services/LogQueryService.js";
 
 import { LogIndexer } from "./infrastructure/indexing/LogIndexer.js";
@@ -5,7 +9,7 @@ import { LogDatabase } from "./infrastructure/persistence/LogDatabase.js";
 
 import type { LogAggregateGroupBy, LogQueryOptions } from "./interfaces/index.js";
 
-import { startMikroScopeServer } from "./server.js";
+import { type StartMikroScopeServerOptions, startMikroScopeServer } from "./server.js";
 
 type ParsedArgs = {
   _: string[];
@@ -36,12 +40,6 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-function getStringArg(args: ParsedArgs, key: string, fallback: string): string {
-  const value = args[key];
-  if (typeof value !== "string" || value.length === 0) return fallback;
-  return value;
-}
-
 function getNumberArg(args: ParsedArgs, key: string, fallback: number): number {
   const value = args[key];
   if (typeof value !== "string") return fallback;
@@ -50,19 +48,17 @@ function getNumberArg(args: ParsedArgs, key: string, fallback: number): number {
   return parsed;
 }
 
-function getBooleanArg(args: ParsedArgs, key: string, fallback: boolean): boolean {
-  const value = args[key];
-  if (typeof value !== "string") return fallback;
-
-  const normalized = value.toLowerCase();
-  if (normalized === "true" || normalized === "1") return true;
-  if (normalized === "false" || normalized === "0") return false;
-  return fallback;
-}
-
 function getOptionalArg(args: ParsedArgs, key: string): string | undefined {
   const value = args[key];
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function getOptionalNumberArg(args: ParsedArgs, key: string): number | undefined {
+  const value = args[key];
+  if (typeof value !== "string") return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+  return parsed;
 }
 
 function getOptionalBooleanArg(args: ParsedArgs, key: string): boolean | undefined {
@@ -88,8 +84,10 @@ function printHelp(): void {
       "Flags:",
       "  --db     SQLite file path (default: ./data/mikroscope.db)",
       "  --logs   NDJSON log directory (default: ./logs)",
+      "  --config JSON configuration file path (default: ./mikroscope.config.json when present)",
       "  --host   Bind host for `serve` (default: 127.0.0.1)",
       "  --port   Server port for `serve` (default: 4310)",
+      "  --protocol http|https for `serve` (default: http)",
       "  --https  Enable HTTPS for `serve` (default: false)",
       "  --tls-cert  TLS certificate path (required with --https)",
       "  --tls-key   TLS private key path (required with --https)",
@@ -119,6 +117,7 @@ function printHelp(): void {
       "  --alert-webhook-timeout-ms Webhook request timeout per attempt (default: 5000)",
       "  --alert-webhook-retry-attempts Max webhook attempts per alert (default: 3)",
       "  --alert-webhook-backoff-ms Base retry backoff in ms (default: 250)",
+      "  --alert-config-path Path for persisted alert config JSON (default: <db-dir>/mikroscope.alert-config.json)",
       "  --from   ISO timestamp lower bound (query)",
       "  --to     ISO timestamp upper bound (query)",
       "  --level  DEBUG|INFO|WARN|ERROR (query)",
@@ -134,9 +133,28 @@ function printHelp(): void {
   );
 }
 
+function resolveCommandConfig(
+  args: ParsedArgs,
+  includeLogsPath: boolean,
+): Pick<StartMikroScopeServerOptions, "dbPath" | "logsPath"> {
+  const configFilePath = resolveServerConfigFilePath(process.argv.slice(2), process.env);
+  const resolved = resolveMikroScopeServerOptions({
+    configFilePath,
+    env: process.env,
+    overrides: {
+      dbPath: getOptionalArg(args, "db"),
+      logsPath: includeLogsPath ? getOptionalArg(args, "logs") : undefined,
+    },
+  });
+
+  return {
+    dbPath: resolved.dbPath,
+    logsPath: resolved.logsPath,
+  };
+}
+
 async function runIndex(args: ParsedArgs): Promise<void> {
-  const dbPath = getStringArg(args, "db", "./data/mikroscope.db");
-  const logsPath = getStringArg(args, "logs", "./logs");
+  const { dbPath, logsPath } = resolveCommandConfig(args, true);
   const db = new LogDatabase(dbPath);
   const indexer = new LogIndexer(db);
 
@@ -149,7 +167,7 @@ async function runIndex(args: ParsedArgs): Promise<void> {
 }
 
 async function runQuery(args: ParsedArgs): Promise<void> {
-  const dbPath = getStringArg(args, "db", "./data/mikroscope.db");
+  const { dbPath } = resolveCommandConfig(args, false);
   const query: LogQueryOptions = {
     audit: getOptionalBooleanArg(args, "audit"),
     cursor: getOptionalArg(args, "cursor"),
@@ -179,7 +197,7 @@ function parseGroupByArg(value: string | undefined): LogAggregateGroupBy | undef
 }
 
 async function runAggregate(args: ParsedArgs): Promise<void> {
-  const dbPath = getStringArg(args, "db", "./data/mikroscope.db");
+  const { dbPath } = resolveCommandConfig(args, false);
   const groupBy = parseGroupByArg(getOptionalArg(args, "group-by"));
   if (!groupBy) {
     throw new Error("Missing or invalid --group-by. Use level, event, field, or correlation.");
@@ -209,88 +227,61 @@ async function runAggregate(args: ParsedArgs): Promise<void> {
 }
 
 async function runServe(args: ParsedArgs): Promise<void> {
-  const dbPath = getStringArg(args, "db", "./data/mikroscope.db");
-  const logsPath = getStringArg(args, "logs", "./logs");
-  const host = getStringArg(args, "host", process.env.MIKROSCOPE_HOST || "127.0.0.1");
-  const port = getNumberArg(args, "port", 4310);
-  const httpsEnabled = getBooleanArg(args, "https", process.env.MIKROSCOPE_HTTPS === "1");
-  const protocol = httpsEnabled ? "https" : "http";
-  const tlsCertPath = getOptionalArg(args, "tls-cert") || process.env.MIKROSCOPE_TLS_CERT_PATH;
-  const tlsKeyPath = getOptionalArg(args, "tls-key") || process.env.MIKROSCOPE_TLS_KEY_PATH;
-  const apiToken = getOptionalArg(args, "api-token") || process.env.MIKROSCOPE_API_TOKEN;
-  const authUsername =
-    getOptionalArg(args, "auth-username") || process.env.MIKROSCOPE_AUTH_USERNAME;
-  const authPassword =
-    getOptionalArg(args, "auth-password") || process.env.MIKROSCOPE_AUTH_PASSWORD;
-  const corsAllowOrigin =
-    getOptionalArg(args, "cors-allow-origin") || process.env.MIKROSCOPE_CORS_ALLOW_ORIGIN;
-  const dbRetentionDays = getNumberArg(args, "db-retention-days", 30);
-  const dbAuditRetentionDays = getNumberArg(args, "db-audit-retention-days", 365);
-  const logRetentionDays = getNumberArg(args, "log-retention-days", 30);
-  const logAuditRetentionDays = getNumberArg(args, "log-audit-retention-days", 365);
-  const auditBackupDirectory =
-    getOptionalArg(args, "audit-backup-dir") || process.env.MIKROSCOPE_AUDIT_BACKUP_DIR;
-  const maintenanceIntervalMs = getNumberArg(args, "maintenance-interval-ms", 6 * 60 * 60 * 1000);
-  const minFreeBytes = getNumberArg(args, "min-free-bytes", 256 * 1024 * 1024);
-  const ingestIntervalMs = getNumberArg(args, "ingest-interval-ms", 2_000);
-  const disableAutoIngest = getBooleanArg(args, "disable-auto-ingest", false);
-  const ingestProducers =
-    getOptionalArg(args, "ingest-producers") || process.env.MIKROSCOPE_INGEST_PRODUCERS;
-  const ingestMaxBodyBytes = getNumberArg(args, "ingest-max-body-bytes", 1_048_576);
-  const ingestAsyncQueue = getBooleanArg(
-    args,
-    "ingest-async-queue",
-    process.env.MIKROSCOPE_INGEST_ASYNC_QUEUE === "1" ||
-      process.env.MIKROSCOPE_INGEST_ASYNC_QUEUE === "true",
-  );
-  const ingestQueueFlushMs = getNumberArg(args, "ingest-queue-flush-ms", 25);
-  const alertWebhookUrl =
-    getOptionalArg(args, "alert-webhook-url") || process.env.MIKROSCOPE_ALERT_WEBHOOK_URL;
-  const alertIntervalMs = getNumberArg(args, "alert-interval-ms", 30_000);
-  const alertWindowMinutes = getNumberArg(args, "alert-window-minutes", 5);
-  const alertErrorThreshold = getNumberArg(args, "alert-error-threshold", 20);
-  const alertNoLogsThresholdMinutes = getNumberArg(args, "alert-no-logs-threshold-minutes", 0);
-  const alertCooldownMs = getNumberArg(args, "alert-cooldown-ms", 5 * 60 * 1000);
-  const alertWebhookTimeoutMs = getNumberArg(args, "alert-webhook-timeout-ms", 5_000);
-  const alertWebhookRetryAttempts = getNumberArg(args, "alert-webhook-retry-attempts", 3);
-  const alertWebhookBackoffMs = getNumberArg(args, "alert-webhook-backoff-ms", 250);
+  const overrides: Partial<StartMikroScopeServerOptions> = {
+    apiToken: getOptionalArg(args, "api-token"),
+    authPassword: getOptionalArg(args, "auth-password"),
+    authUsername: getOptionalArg(args, "auth-username"),
+    alertConfigPath: getOptionalArg(args, "alert-config-path"),
+    alertCooldownMs: getOptionalNumberArg(args, "alert-cooldown-ms"),
+    alertErrorThreshold: getOptionalNumberArg(args, "alert-error-threshold"),
+    alertIntervalMs: getOptionalNumberArg(args, "alert-interval-ms"),
+    alertNoLogsThresholdMinutes: getOptionalNumberArg(args, "alert-no-logs-threshold-minutes"),
+    alertWebhookBackoffMs: getOptionalNumberArg(args, "alert-webhook-backoff-ms"),
+    alertWebhookRetryAttempts: getOptionalNumberArg(args, "alert-webhook-retry-attempts"),
+    alertWebhookTimeoutMs: getOptionalNumberArg(args, "alert-webhook-timeout-ms"),
+    alertWebhookUrl: getOptionalArg(args, "alert-webhook-url"),
+    alertWindowMinutes: getOptionalNumberArg(args, "alert-window-minutes"),
+    auditBackupDirectory: getOptionalArg(args, "audit-backup-dir"),
+    corsAllowOrigin: getOptionalArg(args, "cors-allow-origin"),
+    dbAuditRetentionDays: getOptionalNumberArg(args, "db-audit-retention-days"),
+    dbPath: getOptionalArg(args, "db"),
+    dbRetentionDays: getOptionalNumberArg(args, "db-retention-days"),
+    disableAutoIngest: getOptionalBooleanArg(args, "disable-auto-ingest"),
+    host: getOptionalArg(args, "host"),
+    ingestAsyncQueue: getOptionalBooleanArg(args, "ingest-async-queue"),
+    ingestIntervalMs: getOptionalNumberArg(args, "ingest-interval-ms"),
+    ingestMaxBodyBytes: getOptionalNumberArg(args, "ingest-max-body-bytes"),
+    ingestProducers: getOptionalArg(args, "ingest-producers"),
+    ingestQueueFlushMs: getOptionalNumberArg(args, "ingest-queue-flush-ms"),
+    logAuditRetentionDays: getOptionalNumberArg(args, "log-audit-retention-days"),
+    logsPath: getOptionalArg(args, "logs"),
+    logRetentionDays: getOptionalNumberArg(args, "log-retention-days"),
+    maintenanceIntervalMs: getOptionalNumberArg(args, "maintenance-interval-ms"),
+    minFreeBytes: getOptionalNumberArg(args, "min-free-bytes"),
+    port: getOptionalNumberArg(args, "port"),
+    tlsCertPath: getOptionalArg(args, "tls-cert"),
+    tlsKeyPath: getOptionalArg(args, "tls-key"),
+  };
 
-  await startMikroScopeServer({
-    apiToken,
-    authPassword,
-    authUsername,
-    alertCooldownMs,
-    alertErrorThreshold,
-    alertIntervalMs,
-    alertNoLogsThresholdMinutes,
-    alertWebhookUrl,
-    alertWebhookBackoffMs,
-    alertWebhookRetryAttempts,
-    alertWebhookTimeoutMs,
-    alertWindowMinutes,
-    corsAllowOrigin,
-    auditBackupDirectory,
-    attachSignalHandlers: true,
-    dbPath,
-    dbAuditRetentionDays,
-    dbRetentionDays,
-    host,
-    ingestIntervalMs,
-    disableAutoIngest,
-    ingestProducers,
-    ingestMaxBodyBytes,
-    ingestAsyncQueue,
-    ingestQueueFlushMs,
-    logAuditRetentionDays,
-    logRetentionDays,
-    logsPath,
-    maintenanceIntervalMs,
-    minFreeBytes,
-    port,
-    protocol,
-    tlsCertPath,
-    tlsKeyPath,
+  const protocol = getOptionalArg(args, "protocol");
+  if (protocol === "http" || protocol === "https") {
+    overrides.protocol = protocol;
+  }
+
+  const https = getOptionalBooleanArg(args, "https");
+  if (https === true) {
+    overrides.protocol = "https";
+  } else if (https === false && !overrides.protocol) {
+    overrides.protocol = "http";
+  }
+
+  const configFilePath = resolveServerConfigFilePath(process.argv.slice(2), process.env);
+  const resolved = resolveMikroScopeServerOptions({
+    configFilePath,
+    env: process.env,
+    overrides,
   });
+  await startMikroScopeServer(resolved);
 }
 
 async function main(): Promise<void> {
