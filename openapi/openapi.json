@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "MikroScope API",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "description": "HTTP API for ingesting, indexing, querying, and operating MikroScope logs.\n\nAuthentication behavior is runtime-configurable:\n- `/api/reindex`, `/api/logs`, `/api/logs/aggregate` require Bearer API token and/or Basic auth only if enabled.\n- `/api/ingest` requires producer Bearer token mapping and/or Basic auth username (used as `producerId`) when enabled.\n\nIf no auth is configured for a route category, that category is open.\n"
   },
   "servers": [
@@ -40,9 +40,7 @@
         ],
         "summary": "CORS preflight",
         "operationId": "preflightHealth",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "204": {
             "description": "No Content"
@@ -55,9 +53,7 @@
         ],
         "summary": "Service health and runtime status",
         "operationId": "getHealth",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "200": {
             "description": "Runtime health snapshot",
@@ -82,9 +78,7 @@
         ],
         "summary": "CORS preflight",
         "operationId": "preflightIngest",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "204": {
             "description": "No Content"
@@ -100,14 +94,10 @@
         "description": "Accepts logs as either:\n- A top-level JSON array\n- An object wrapper `{ \"logs\": [...] }`\n\n`producerId` is always resolved from auth context, not trusted from payload.\n- Bearer token is resolved via producer mapping (`token=producerId`).\n- Basic auth uses the authenticated username as `producerId`.\n\nNon-object log items are rejected per-item (`rejected` count) while valid objects are accepted.\n",
         "security": [
           {
-            "producerBearerAuth": [
-
-            ]
+            "producerBearerAuth": []
           },
           {
-            "basicAuth": [
-
-            ]
+            "basicAuth": []
           }
         ],
         "requestBody": {
@@ -233,9 +223,7 @@
         ],
         "summary": "CORS preflight",
         "operationId": "preflightAlertConfig",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "204": {
             "description": "No Content"
@@ -250,14 +238,10 @@
         "operationId": "getAlertConfig",
         "security": [
           {
-            "apiBearerAuth": [
-
-            ]
+            "apiBearerAuth": []
           },
           {
-            "basicAuth": [
-
-            ]
+            "basicAuth": []
           }
         ],
         "responses": {
@@ -288,14 +272,10 @@
         "description": "Applies the policy update immediately and persists it to disk, so settings survive restarts.\n",
         "security": [
           {
-            "apiBearerAuth": [
-
-            ]
+            "apiBearerAuth": []
           },
           {
-            "basicAuth": [
-
-            ]
+            "basicAuth": []
           }
         ],
         "requestBody": {
@@ -355,9 +335,7 @@
         ],
         "summary": "CORS preflight",
         "operationId": "preflightAlertTestWebhook",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "204": {
             "description": "No Content"
@@ -373,14 +351,10 @@
         "description": "Triggers a synthetic webhook event (`rule=manual_test`) using current policy settings.\nYou can optionally override `webhookUrl` without persisting changes.\n",
         "security": [
           {
-            "apiBearerAuth": [
-
-            ]
+            "apiBearerAuth": []
           },
           {
-            "basicAuth": [
-
-            ]
+            "basicAuth": []
           }
         ],
         "requestBody": {
@@ -440,9 +414,7 @@
         ],
         "summary": "CORS preflight",
         "operationId": "preflightReindex",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "204": {
             "description": "No Content"
@@ -458,14 +430,10 @@
         "description": "Resets the DB, then performs full indexing from the configured logs directory.",
         "security": [
           {
-            "apiBearerAuth": [
-
-            ]
+            "apiBearerAuth": []
           },
           {
-            "basicAuth": [
-
-            ]
+            "basicAuth": []
           }
         ],
         "responses": {
@@ -495,9 +463,7 @@
         ],
         "summary": "CORS preflight",
         "operationId": "preflightLogs",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "204": {
             "description": "No Content"
@@ -512,14 +478,10 @@
         "operationId": "queryLogs",
         "security": [
           {
-            "apiBearerAuth": [
-
-            ]
+            "apiBearerAuth": []
           },
           {
-            "basicAuth": [
-
-            ]
+            "basicAuth": []
           }
         ],
         "parameters": [
@@ -575,9 +537,7 @@
         ],
         "summary": "CORS preflight",
         "operationId": "preflightAggregateLogs",
-        "security": [
-
-        ],
+        "security": [],
         "responses": {
           "204": {
             "description": "No Content"
@@ -592,14 +552,10 @@
         "operationId": "aggregateLogs",
         "security": [
           {
-            "apiBearerAuth": [
-
-            ]
+            "apiBearerAuth": []
           },
           {
-            "basicAuth": [
-
-            ]
+            "basicAuth": []
           }
         ],
         "parameters": [
@@ -845,8 +801,7 @@
         "oneOf": [
           {
             "type": "array",
-            "items": {
-            }
+            "items": {}
           },
           {
             "type": "object",
@@ -856,8 +811,7 @@
             "properties": {
               "logs": {
                 "type": "array",
-                "items": {
-                }
+                "items": {}
               }
             },
             "additionalProperties": true

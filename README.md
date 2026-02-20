@@ -75,7 +75,7 @@ If `mikroscope` is not found after install, add your chosen bin directory to `PA
 ### Manual Release Install
 
 ```bash
-VERSION=0.0.1
+VERSION=1.0.0
 curl -LO "https://github.com/mikaelvesavuori/mikroscope/releases/download/v${VERSION}/mikroscope-${VERSION}.tar.gz"
 curl -LO "https://github.com/mikaelvesavuori/mikroscope/releases/download/v${VERSION}/SHA256SUMS.txt"
 shasum -a 256 -c SHA256SUMS.txt
@@ -134,7 +134,34 @@ If `/docs` is blank (for example blocked CDN scripts), use `/openapi.json` direc
 1. Environment variables (`MIKROSCOPE_*`)
 1. Direct CLI flags (highest precedence)
 
-Example `mikroscope.config.json`:
+### mikroscope.config.json
+
+MikroScope will automatically read `./mikroscope.config.json` when it exists in your current working directory.
+
+Quick setup:
+
+1. Copy the example template from this repo:
+
+```bash
+cp ./examples/mikroscope.config.json ./mikroscope.config.json
+```
+
+1. Set your real secrets/tokens in `./mikroscope.config.json`.
+1. Start MikroScope:
+
+```bash
+mikroscope serve
+```
+
+If your config is not in the current directory, set an explicit path:
+
+```bash
+mikroscope serve --config /absolute/or/relative/path/mikroscope.config.json
+```
+
+Config file keys use camelCase (for example `ingestQueueFlushMs`, `alertErrorThreshold`) and match the server option names.
+
+Template (`./examples/mikroscope.config.json`):
 
 ```json
 {
@@ -150,7 +177,9 @@ Example `mikroscope.config.json`:
 }
 ```
 
-Use it:
+You can still override config-file values via env vars or CLI flags at runtime.
+
+Use it explicitly:
 
 ```bash
 mikroscope serve --config ./mikroscope.config.json

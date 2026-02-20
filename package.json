@@ -1,7 +1,7 @@
 {
   "name": "mikroscope",
   "description": "Lightweight log sidecar for NDJSON ingestion, query, and alerting",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "type": "module",
   "author": "Mikael Vesavuori",
   "license": "MIT",
@@ -58,10 +58,10 @@
     "demo:alerts": "bash scripts/manual-alert-demo.sh",
     "release:assets": "bash scripts/create-release-assets.sh",
     "test:performance": "tsx tests/performance/run.perf.ts",
-    "test:performance:quick": "PERF_MS_FILE_COUNT=20 PERF_MS_LOGS_PER_FILE=250 PERF_MS_APPEND_RECORDS=800 PERF_MS_QUERY_COUNT=120 PERF_MS_TENANT_COUNT=350 tsx tests/performance/run.perf.ts",
-    "remove:index": "tsx src/cli.ts index --logs ./logs --db ./data/mikroscope.db",
-    "remove:query": "tsx src/cli.ts query --db ./data/mikroscope.db",
-    "remove:serve": "tsx src/cli.ts serve --host 127.0.0.1 --logs ./logs --db ./data/mikroscope.db --port 4310"
+    "test:performance:quick": "PERF_MS_FILE_COUNT=20 PERF_MS_LOGS_PER_FILE=250 PERF_MS_APPEND_RECORDS=800 PERF_MS_QUERY_COUNT=120 PERF_MS_TENANT_COUNT=350 tsx tests/performance/run.perf.ts"
+  },
+  "dependencies": {
+    "mikroconf": "1"
   },
   "devDependencies": {
     "@biomejs/biome": "2",
@@ -72,8 +72,5 @@
     "tsx": "4",
     "typescript": "5",
     "vitest": "4"
-  },
-  "dependencies": {
-    "mikroconf": "^1.0.0"
   }
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MikroScope API
-  version: 0.1.0
+  version: 1.0.0
   description: |
     HTTP API for ingesting, indexing, querying, and operating MikroScope logs.
 
