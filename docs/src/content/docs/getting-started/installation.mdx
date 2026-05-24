@@ -1,0 +1,58 @@
+---
+title: Installation
+description: Install and run the MikroScope logging sidecar.
+---
+
+## Requirements
+
+- Node.js 25 or newer.
+- A writable log directory.
+- A writable data directory for SQLite.
+
+## Install the Sidecar
+
+Use the npm package for the MikroScope API/logging sidecar:
+
+```bash
+npm install -g mikroscope
+```
+
+Then start the server:
+
+```bash
+mikroscope serve \
+  --host 127.0.0.1 \
+  --port 3000 \
+  --logs ./logs \
+  --db ./data/mikroscope.db \
+  --api-token "api-token-123" \
+  --ingest-producers "backend-token=backend-api,frontend-token=frontend-web"
+```
+
+The API runs on `http://127.0.0.1:3000` by default.
+
+You can also run without a global install:
+
+```bash
+npx mikroscope@latest serve --logs ./logs --db ./data/mikroscope.db
+```
+
+## Static Console
+
+Download and serve the browser console separately:
+
+```bash
+curl -sSL -o mikroscope_app.zip https://releases.mikrosuite.com/mikroscope_app_latest.zip
+unzip mikroscope_app.zip -d mikroscope_app
+cd mikroscope_app/*
+npx http-server . -a 127.0.0.1 -p 8000 -c-1
+```
+
+The console reads `config.json` and sends API requests to the configured `apiOrigin`.
+
+## Release Downloads
+
+The latest release archives are available from GitHub Releases and these stable URLs. Use the API ZIP when you need a pinned server artifact instead of the npm CLI package:
+
+- `https://releases.mikrosuite.com/mikroscope_api_latest.zip` - Node API and CLI bundle
+- `https://releases.mikrosuite.com/mikroscope_app_latest.zip` - static browser console

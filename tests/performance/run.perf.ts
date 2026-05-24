@@ -1,15 +1,15 @@
 #!/usr/bin/env tsx
 
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
 
-import { LogQueryService } from "../../src/application/services/LogQueryService.js";
-import { LogIndexer } from "../../src/infrastructure/indexing/LogIndexer.js";
-import { LogDatabase } from "../../src/infrastructure/persistence/LogDatabase.js";
-import { startMikroScopeServer } from "../../src/server.js";
+import { LogQueryService } from "../../api/src/application/services/LogQueryService.js";
+import { LogIndexer } from "../../api/src/infrastructure/indexing/LogIndexer.js";
+import { LogDatabase } from "../../api/src/infrastructure/persistence/LogDatabase.js";
+import { startMikroScopeServer } from "../../api/src/server.js";
 
 type Metric = {
   scenario: string;
@@ -159,7 +159,10 @@ function createLogRecord(input: {
   };
 }
 
-async function requestJson(url: URL, options: { headers?: Record<string, string>; method?: string } = {}) {
+async function requestJson(
+  url: URL,
+  options: { headers?: Record<string, string>; method?: string } = {},
+) {
   return new Promise<JsonResponse>((resolve, reject) => {
     const req = httpRequest(
       {
@@ -211,7 +214,9 @@ async function seedLogs(
 
     for (let j = 0; j < recordsPerFile; j++) {
       const customerId = tenantIds[randomInt(rng, 0, tenantIds.length - 1)];
-      const timestamp = new Date(startMs + globalIndex * 15_000 + randomInt(rng, 0, 5_000)).toISOString();
+      const timestamp = new Date(
+        startMs + globalIndex * 15_000 + randomInt(rng, 0, 5_000),
+      ).toISOString();
       const record = createLogRecord({
         customerId,
         index: globalIndex,
@@ -253,7 +258,9 @@ async function appendLogs(
   const lines: string[] = [];
 
   for (let i = 0; i < appendCount; i++) {
-    const timestamp = new Date(startTimestampMs + i * 5_000 + randomInt(rng, 0, 2_000)).toISOString();
+    const timestamp = new Date(
+      startTimestampMs + i * 5_000 + randomInt(rng, 0, 2_000),
+    ).toISOString();
     const customerId = tenantIds[randomInt(rng, 0, tenantIds.length - 1)];
     lines.push(
       JSON.stringify(
@@ -297,7 +304,9 @@ function formatMetric(metric: Metric): string {
 }
 
 function assertExpectations(metrics: Metric[]): boolean {
-  const metricMap = new Map(metrics.map((metric) => [`${metric.scenario}:${metric.metric}`, metric.value]));
+  const metricMap = new Map(
+    metrics.map((metric) => [`${metric.scenario}:${metric.metric}`, metric.value]),
+  );
 
   const coldThroughput = metricMap.get("Indexing:Cold index throughput") ?? 0;
   const directP95 = metricMap.get("Query:Direct query p95") ?? Number.POSITIVE_INFINITY;
@@ -338,7 +347,9 @@ function assertExpectations(metrics: Metric[]): boolean {
 
   process.stdout.write("\nExpectation checks:\n");
   for (const check of checks) {
-    process.stdout.write(`- ${check.ok ? "PASS" : "WARN"}: ${check.label} (actual: ${check.actual})\n`);
+    process.stdout.write(
+      `- ${check.ok ? "PASS" : "WARN"}: ${check.label} (actual: ${check.actual})\n`,
+    );
   }
 
   return checks.every((check) => check.ok);
@@ -347,7 +358,10 @@ function assertExpectations(metrics: Metric[]): boolean {
 async function main(): Promise<void> {
   const rng = createRng(config.seed);
   const metrics: Metric[] = [];
-  const tenantIds = Array.from({ length: config.tenantCount }, (_, idx) => `CUST-${pad(idx + 1, 6)}`);
+  const tenantIds = Array.from(
+    { length: config.tenantCount },
+    (_, idx) => `CUST-${pad(idx + 1, 6)}`,
+  );
   const tempRoot = await mkdtemp(join(tmpdir(), "mikroscope-perf-"));
   const logsPath = join(tempRoot, "logs");
   const dbPath = join(tempRoot, "mikroscope.db");
@@ -422,11 +436,18 @@ async function main(): Promise<void> {
     // Prime incremental state after full indexing.
     await indexer.indexDirectoryIncremental(logsPath);
 
-    await appendLogs(logsPath, config.appendRecordCount, tenantIds, rng, Date.parse(seeded.lastTimestamp) + 60_000);
+    await appendLogs(
+      logsPath,
+      config.appendRecordCount,
+      tenantIds,
+      rng,
+      Date.parse(seeded.lastTimestamp) + 60_000,
+    );
     const incrementalStart = performance.now();
     const incrementalReport = await indexer.indexDirectoryIncremental(logsPath);
     const incrementalMs = performance.now() - incrementalStart;
-    const incrementalThroughput = incrementalReport.recordsInserted / Math.max(incrementalMs / 1000, 0.0001);
+    const incrementalThroughput =
+      incrementalReport.recordsInserted / Math.max(incrementalMs / 1000, 0.0001);
     metrics.push(
       {
         scenario: "Indexing",
@@ -462,7 +483,8 @@ async function main(): Promise<void> {
       directDurations.push(performance.now() - directStart);
       directHits.push(directEntries.length);
 
-      const customerId = seeded.sampledCustomerIds[randomInt(rng, 0, seeded.sampledCustomerIds.length - 1)];
+      const customerId =
+        seeded.sampledCustomerIds[randomInt(rng, 0, seeded.sampledCustomerIds.length - 1)];
       const fieldStart = performance.now();
       const fieldEntries = queryService.queryLogsPage({
         field: "customerId",
@@ -570,9 +592,12 @@ async function main(): Promise<void> {
         for (let i = 0; i < apiIterations; i++) {
           const level = levels[randomInt(rng, 0, levels.length - 1)];
           const started = performance.now();
-          const response = await requestJson(new URL(`/api/logs?level=${level}&limit=100`, server.url), {
-            headers: { authorization: `Bearer ${apiToken}` },
-          });
+          const response = await requestJson(
+            new URL(`/api/logs?level=${level}&limit=100`, server.url),
+            {
+              headers: { authorization: `Bearer ${apiToken}` },
+            },
+          );
           apiDurations.push(performance.now() - started);
           if (response.statusCode !== 200) {
             throw new Error(`Unexpected API status ${response.statusCode}`);

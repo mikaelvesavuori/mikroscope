@@ -1,0 +1,625 @@
+<!doctype html>
+<html lang="en">
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MikroScope</title>
+    <meta name="description" content="A static console for querying MikroScope logs, timelines, correlations, and alerts." />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./favicon.ico" sizes="any" />
+    <link rel="icon" href="./favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0b0d10" media="(prefers-color-scheme: dark)" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+
+  <body>
+    <svg class="icon-sprite" aria-hidden="true" focusable="false">
+      <symbol id="icon-webhook" viewBox="0 0 24 24">
+        <circle cx="7" cy="8" r="2.5" />
+        <circle cx="17" cy="6" r="2.5" />
+        <circle cx="16" cy="17" r="3" />
+        <path d="m9.2 7.5 5.4-1M8.6 10.1l5.1 5" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-help" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M9.8 9.5a2.4 2.4 0 0 1 2.4-2.1c1.5 0 2.7.9 2.7 2.3 0 1.1-.6 1.8-1.7 2.4-.9.5-1.2 1-1.2 2v.2M12 17h.01" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-moon" viewBox="0 0 24 24">
+        <path fill="currentColor" stroke="none" d="M12 20.5a8.5 8.5 0 0 0 8.5-8.5c0-.7-.1-1.05-.43-1.05-.2 0-.36.12-.56.22a5.8 5.8 0 0 1-2.58.58 4.68 4.68 0 0 1-4.68-4.68c0-.94.2-1.8.58-2.58.1-.2.22-.36.22-.56 0-.33-.35-.43-1.05-.43a8.5 8.5 0 1 0 0 17Z" />
+      </symbol>
+      <symbol id="icon-sun" viewBox="0 0 24 24">
+        <path d="M12 3v1.5m0 15V21m8.485-8.485H21m-18 0H3m15.364-6.364 1.06-1.06M4.576 19.425l1.06-1.06m12.728 0 1.06 1.06M4.576 4.575l1.06 1.06M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-reset" viewBox="0 0 24 24">
+        <path d="M5 9V4m0 5h5M5.8 9A7 7 0 1 1 5 15.4" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-play" viewBox="0 0 24 24">
+        <path fill="currentColor" stroke="none" d="M7 5.7c0-1.1 1.2-1.8 2.1-1.2l9.4 6.1c.9.6.9 1.9 0 2.5l-9.4 6.1A1.4 1.4 0 0 1 7 18.1V5.7Z" />
+      </symbol>
+      <symbol id="icon-link" viewBox="0 0 24 24">
+        <path d="M9.5 14.5 14.5 9.5M10.8 6.8l1-1a4.1 4.1 0 0 1 5.8 5.8l-1 1M13.2 17.2l-1 1a4.1 4.1 0 0 1-5.8-5.8l1-1" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-refresh" viewBox="0 0 24 24">
+        <path d="M20 7v5h-5M4 17v-5h5M18.2 10A6.8 6.8 0 0 0 6.8 7.8M5.8 14a6.8 6.8 0 0 0 11.4 2.2" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-list" viewBox="0 0 24 24">
+        <path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-network" viewBox="0 0 24 24">
+        <circle cx="6.5" cy="12" r="2.5" />
+        <circle cx="17.5" cy="6.5" r="2.5" />
+        <circle cx="17.5" cy="17.5" r="2.5" />
+        <path d="m8.7 10.9 6.6-3.3M8.7 13.1l6.6 3.3" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-timeline" viewBox="0 0 24 24">
+        <path d="M5 19V5M5 17h14M8 15v-4M12 15V8M16 15v-6" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-panel-top" viewBox="0 0 24 24">
+        <rect x="4.5" y="5" width="15" height="14" rx="2" />
+        <path d="M4.5 10h15" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-panel-right" viewBox="0 0 24 24">
+        <rect x="4.5" y="5" width="15" height="14" rx="2" />
+        <path d="M14.5 5v14" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-expand" viewBox="0 0 24 24">
+        <path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4M4.5 4.5 9 9m10.5-4.5L15 9M4.5 19.5 9 15m10.5 4.5L15 15" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-keyboard" viewBox="0 0 24 24">
+        <rect x="4" y="6.5" width="16" height="11" rx="2" />
+        <path d="M7.5 10h.01M11 10h.01M14.5 10h.01M18 10h.01M7.5 13.8h.01M11 13.8h6" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-filter" viewBox="0 0 24 24">
+        <path d="M5 6h14l-5.5 6.2V18l-3 1v-6.8L5 6Z" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-alert" viewBox="0 0 24 24">
+        <path d="M12 4 21 19H3L12 4Z" stroke-linejoin="round" />
+        <path d="M12 9v4M12 16.5h.01" stroke-linecap="round" />
+      </symbol>
+      <symbol id="icon-trace" viewBox="0 0 24 24">
+        <path d="M5 12h4l2-5 3 10 2-5h3" stroke-linecap="round" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-theme" viewBox="0 0 24 24">
+        <path d="M12 4a8 8 0 1 0 0 16 4 4 0 1 1 0-8 4 4 0 1 0 0-8Z" stroke-linejoin="round" />
+      </symbol>
+      <symbol id="icon-spark" viewBox="0 0 24 24">
+        <path d="M12 3.5 13.8 9l5.7 3-5.7 3L12 20.5 10.2 15l-5.7-3 5.7-3L12 3.5Z" stroke-linejoin="round" />
+      </symbol>
+    </svg>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-mark">
+          <span>MikroScope</span>
+        </div>
+        <div class="topbar-actions">
+          <button id="webhook-config-button" class="button icon-button" type="button" aria-label="Open alert webhook config"
+            title="Open alert webhook config">
+            <svg class="icon" aria-hidden="true"><use href="#icon-webhook"></use></svg>
+          </button>
+          <button id="shortcuts-help-button" class="button icon-button" type="button" aria-label="Keyboard shortcuts"
+            title="Keyboard shortcuts (?)">
+            <svg class="icon" aria-hidden="true"><use href="#icon-help"></use></svg>
+          </button>
+          <button id="theme-toggle" class="button icon-button" type="button" aria-label="Toggle dark/light mode"
+            title="Toggle dark/light mode">
+            <svg class="icon" aria-hidden="true"><use href="#icon-moon"></use></svg>
+          </button>
+          <button id="reset-baseline-button" class="button icon-button" type="button"
+            aria-label="Reset to baseline query" title="Reset to baseline query">
+            <svg class="icon" aria-hidden="true"><use href="#icon-reset"></use></svg>
+          </button>
+          <button id="refresh-button" class="button button-primary icon-button run-query-button" type="button"
+            aria-label="Run Query" title="Run Query">
+            <svg class="icon" aria-hidden="true"><use href="#icon-play"></use></svg>
+          </button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel query-panel">
+          <details class="details-panel query-details" open>
+            <summary>Query Controls</summary>
+            <div class="details-body">
+              <div class="details-body-inner query-details-inner">
+                <form id="remote-query-form" class="query-command-row">
+                  <label>
+                    From
+                    <div class="datetime-control">
+                      <input id="query-from" type="date" />
+                      <input id="query-from-time" type="time" step="1" aria-label="From time" />
+                    </div>
+                  </label>
+                  <label>
+                    To
+                    <div class="datetime-control">
+                      <input id="query-to" type="date" />
+                      <input id="query-to-time" type="time" step="1" aria-label="To time" />
+                    </div>
+                  </label>
+                  <label>
+                    Level
+                    <select id="query-level">
+                      <option value="">Any</option>
+                      <option value="DEBUG">DEBUG</option>
+                      <option value="INFO">INFO</option>
+                      <option value="WARN">WARN</option>
+                      <option value="ERROR">ERROR</option>
+                    </select>
+                  </label>
+                  <label>
+                    Audit
+                    <select id="query-audit">
+                      <option value="">Any</option>
+                      <option value="true">Audit only</option>
+                      <option value="false">Non-audit</option>
+                    </select>
+                  </label>
+                  <label>
+                    Limit
+                    <input id="query-limit" type="number" min="1" max="1000" value="1000" />
+                  </label>
+                </form>
+                <details class="query-advanced-drawer">
+                  <summary>Advanced</summary>
+                  <div class="query-advanced-body">
+                    <div class="chip-actions">
+                      <div class="range-actions">
+                        <span class="range-label">Quick range</span>
+                        <button type="button" class="chip-button" data-range-hours="1">1h</button>
+                        <button type="button" class="chip-button" data-range-hours="6">6h</button>
+                        <button type="button" class="chip-button" data-range-hours="24">24h</button>
+                        <button type="button" class="chip-button" data-range-hours="168">7d</button>
+                        <button type="button" class="chip-button" data-range-hours="720">30d</button>
+                        <button type="button" class="chip-button" data-range-all="true">All</button>
+                      </div>
+                      <div class="preset-actions">
+                        <span class="range-label">Pinned queries</span>
+                        <button type="button" class="chip-button" data-preset="errors24h">
+                          Errors 24h
+                        </button>
+                        <button type="button" class="chip-button" data-preset="audit7d">
+                          Audit 7d
+                        </button>
+                      </div>
+                    </div>
+                    <div class="saved-query-row">
+                      <div class="saved-query-group">
+                        <label>
+                          Query name
+                          <input id="saved-query-name" type="text" placeholder="e.g. Checkout errors (24h)" />
+                        </label>
+                        <div class="inline-actions">
+                          <button id="save-query-button" type="button" class="button">
+                            Save Query
+                          </button>
+                        </div>
+                      </div>
+                      <div class="saved-query-gap" aria-hidden="true"></div>
+                      <div class="saved-query-group">
+                        <label>
+                          Saved query
+                          <select id="saved-query-select">
+                            <option value="">Select...</option>
+                          </select>
+                        </label>
+                        <div class="inline-actions saved-query-actions">
+                          <button id="copy-view-url-button" type="button" class="button copy-json-button">
+                            Copy View URL
+                          </button>
+                          <button id="delete-saved-query-button" type="button" class="button">
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="recent-scope-row">
+                      <label>
+                        Recent scope
+                        <select id="recent-scope-select">
+                          <option value="">Select...</option>
+                        </select>
+                      </label>
+                      <div class="inline-actions saved-query-actions">
+                        <button id="apply-recent-scope-button" type="button" class="button">
+                          Restore Scope
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            </div>
+          </details>
+
+          <details class="details-panel inspect-panel">
+            <summary>Inspect</summary>
+            <div class="details-body">
+              <div class="details-body-inner inspect-details-inner">
+                <div class="trace-grid">
+                  <label>
+                    Key
+                    <select id="trace-field">
+                      <option value="auto">Auto</option>
+                      <option value="correlationId">correlationId</option>
+                      <option value="requestId">requestId</option>
+                    </select>
+                  </label>
+                  <label>
+                    Trace / Correlation
+                    <input id="trace-value" placeholder="corr-... or req-..." />
+                  </label>
+                  <div class="inline-actions trace-actions">
+                    <button id="trace-clear-button" type="button" class="button">Clear</button>
+                    <button id="trace-go-button" type="button" class="button">Go to Trace</button>
+                  </div>
+                </div>
+
+                <details class="inspect-subdrawer">
+                  <summary>Local Filter & Sort</summary>
+                  <div class="inspect-subdrawer-body">
+                    <form id="local-filter-form" class="advanced-grid">
+                      <label>
+                        Field
+                        <input id="local-field" list="field-options" placeholder="* (any field)" />
+                        <datalist id="field-options"></datalist>
+                      </label>
+                      <label>
+                        Value
+                        <input id="local-value" placeholder="contains..." />
+                      </label>
+                      <label>
+                        Match
+                        <select id="local-match-mode">
+                          <option value="contains">Contains</option>
+                          <option value="equals">Equals</option>
+                        </select>
+                      </label>
+                      <label>
+                        Sort field
+                        <select id="sort-field"></select>
+                      </label>
+                      <label>
+                        Sort direction
+                        <select id="sort-direction">
+                          <option value="desc">Desc</option>
+                          <option value="asc">Asc</option>
+                        </select>
+                      </label>
+                      <div class="inline-actions">
+                        <button id="clear-local-button" type="button" class="button">
+                          Clear Local Filter
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+                </details>
+
+                <details class="inspect-subdrawer">
+                  <summary>Trace List</summary>
+                  <div class="inspect-subdrawer-body">
+                    <div class="trace-list-wrap">
+                      <p class="range-label">Recent traces from current result set</p>
+                      <div id="trace-list" class="trace-list"></div>
+                    </div>
+                  </div>
+                </details>
+
+                <input id="query-field" type="hidden" />
+                <input id="query-value" type="hidden" />
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel workspace-panel">
+          <div class="workspace-head">
+            <div class="view-tabs">
+              <button class="view-tab is-active" type="button" data-view-target="stream">Stream</button>
+              <button class="view-tab" type="button" data-view-target="correlations">Correlations</button>
+              <button class="view-tab" type="button" data-view-target="timeline">Timeline</button>
+            </div>
+            <div class="workspace-head-actions">
+              <p id="status-line" class="panel-note">Ready</p>
+              <button id="scope-back-button" class="button icon-button scope-back-button" type="button"
+                aria-label="Back to previous scope" title="Back to previous scope">
+                ↶
+              </button>
+              <button id="stream-expand-button" class="button icon-button stream-expand-icon" type="button"
+                aria-label="Expand Stream" title="Expand Stream">
+                ⤢
+              </button>
+            </div>
+          </div>
+          <div id="active-query-chips" class="query-chips"></div>
+          <div id="scope-trail" class="scope-trail"></div>
+
+          <section id="view-stream" class="view-pane is-active">
+            <section class="metrics metrics-inline">
+              <div class="metric-card">
+                <div class="label">Loaded</div>
+                <div id="metric-loaded" class="value">0</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Visible</div>
+                <div id="metric-visible" class="value">0</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Errors</div>
+                <div id="metric-errors" class="value">0</div>
+              </div>
+              <div class="metric-card">
+                <div class="label">Correlations</div>
+                <div id="metric-correlations" class="value">0</div>
+              </div>
+            </section>
+            <div class="stream-actions">
+              <button id="stream-clear-button" class="button" type="button">Clear Scope</button>
+              <button id="stream-load-more-button" class="button" type="button" hidden>Load More</button>
+            </div>
+            <div class="table-wrap">
+              <table class="logs-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Timestamp</th>
+                    <th>Level</th>
+                    <th>Event</th>
+                    <th>Correlation</th>
+                    <th>Component</th>
+                    <th>Message</th>
+                  </tr>
+                </thead>
+                <tbody id="logs-tbody"></tbody>
+              </table>
+            </div>
+            <details class="details-panel insights-details">
+              <summary>Insights</summary>
+              <div class="details-body">
+                <div class="details-body-inner">
+                  <section class="split">
+                    <div>
+                      <h2>Level Distribution</h2>
+                      <div id="level-distribution" class="bars"></div>
+                    </div>
+                    <div>
+                      <h2>Top Events</h2>
+                      <ol id="top-events" class="simple-list"></ol>
+                    </div>
+                    <div>
+                      <h2>Top Components</h2>
+                      <ol id="top-components" class="simple-list"></ol>
+                    </div>
+                    <div>
+                      <h2>Error Correlations</h2>
+                      <ol id="error-correlations" class="simple-list"></ol>
+                    </div>
+                    <div class="webhook-health-card">
+                      <h2>Alert Webhook</h2>
+                      <dl class="webhook-health-grid">
+                        <div>
+                          <dt>Alerts</dt>
+                          <dd id="webhook-alert-enabled" class="webhook-status-pill is-neutral">-</dd>
+                        </div>
+                        <div>
+                          <dt>Webhook</dt>
+                          <dd id="webhook-configured" class="webhook-status-pill is-neutral">-</dd>
+                        </div>
+                        <div>
+                          <dt>Loop</dt>
+                          <dd id="webhook-loop-running" class="webhook-status-pill is-neutral">-</dd>
+                        </div>
+                        <div>
+                          <dt>Sent / Suppressed</dt>
+                          <dd id="webhook-sent-suppressed">-</dd>
+                        </div>
+                        <div>
+                          <dt>Timeout / Retry</dt>
+                          <dd id="webhook-timeout-retry">-</dd>
+                        </div>
+                        <div>
+                          <dt>Last Success</dt>
+                          <dd id="webhook-last-success">-</dd>
+                        </div>
+                      </dl>
+                      <p id="webhook-status-note" class="panel-note webhook-status-note">
+                        Loading alert webhook status...
+                      </p>
+                      <div class="inline-actions webhook-health-actions">
+                        <button id="webhook-refresh-button" type="button" class="button button-sm">
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </details>
+          </section>
+
+          <section id="view-correlations" class="view-pane">
+            <div id="correlation-groups" class="correlation-grid"></div>
+          </section>
+
+          <section id="view-timeline" class="view-pane">
+            <div class="timeline-toolbar">
+              <label class="timeline-bucket-control" for="timeline-bucket-size">
+                Bucket
+                <select id="timeline-bucket-size">
+                  <option value="auto">Auto fit</option>
+                  <option value="60000">1m</option>
+                  <option value="300000">5m</option>
+                  <option value="900000">15m</option>
+                  <option value="1800000">30m</option>
+                  <option value="3600000">1h</option>
+                  <option value="10800000">3h</option>
+                  <option value="21600000">6h</option>
+                  <option value="43200000">12h</option>
+                  <option value="86400000">1d</option>
+                  <option value="172800000">2d</option>
+                  <option value="604800000">7d</option>
+                  <option value="1209600000">14d</option>
+                  <option value="2592000000">30d</option>
+                </select>
+              </label>
+            </div>
+            <div id="timeline" class="timeline-view"></div>
+            <div id="timeline-tooltip" class="timeline-tooltip" hidden></div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="stream-modal" class="stream-modal">
+      <div class="stream-modal-header">
+        <strong>Log Stream</strong>
+        <div class="stream-modal-actions">
+          <button id="stream-modal-clear-button" class="button" type="button" hidden>Clear Scope</button>
+          <button id="stream-modal-close" class="button icon-button stream-modal-close-button" type="button"
+            aria-label="Close expanded stream" title="Close expanded stream">
+            ×
+          </button>
+        </div>
+      </div>
+      <div class="stream-modal-body">
+        <table class="logs-table logs-table-modal">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Timestamp</th>
+              <th>Level</th>
+              <th>Event</th>
+              <th>Correlation</th>
+              <th>Component</th>
+              <th>Message</th>
+            </tr>
+          </thead>
+          <tbody id="logs-modal-tbody"></tbody>
+        </table>
+      </div>
+    </dialog>
+
+    <dialog id="webhook-config-modal" class="webhook-config-modal" aria-label="Alert webhook config">
+      <div class="webhook-config-modal-header">
+        <strong>Alert Webhook Config</strong>
+        <button id="webhook-config-modal-close" class="button icon-button stream-modal-close-button" type="button"
+          aria-label="Close alert webhook config" title="Close alert webhook config">
+          ×
+        </button>
+      </div>
+      <div class="webhook-config-modal-body">
+        <section class="webhook-crud-section">
+          <p id="webhook-crud-note" class="panel-note">
+            Discovering alert config endpoints...
+          </p>
+          <form id="webhook-crud-form" class="webhook-crud-form">
+            <label class="webhook-crud-url-field">
+              URL
+              <input id="webhook-crud-url" type="url" placeholder="https://example.com/webhook" />
+            </label>
+            <label>
+              Interval (ms)
+              <input id="webhook-crud-interval-ms" type="number" min="1000" step="1000" />
+            </label>
+            <label>
+              Window (min)
+              <input id="webhook-crud-window-minutes" type="number" min="1" step="1" />
+            </label>
+            <label>
+              Error threshold
+              <input id="webhook-crud-error-threshold" type="number" min="1" step="1" />
+            </label>
+            <label>
+              No-logs threshold (min)
+              <input id="webhook-crud-no-logs-threshold-minutes" type="number" min="0" step="1" />
+            </label>
+            <label>
+              Cooldown (ms)
+              <input id="webhook-crud-cooldown-ms" type="number" min="1000" step="1000" />
+            </label>
+            <label>
+              Timeout (ms)
+              <input id="webhook-crud-timeout-ms" type="number" min="250" step="50" />
+            </label>
+            <label>
+              Retry attempts
+              <input id="webhook-crud-retry-attempts" type="number" min="1" step="1" />
+            </label>
+            <label>
+              Backoff (ms)
+              <input id="webhook-crud-backoff-ms" type="number" min="25" step="25" />
+            </label>
+            <label class="webhook-crud-enabled">
+              <input id="webhook-crud-enabled" type="checkbox" checked />
+              <span>Enabled</span>
+            </label>
+          </form>
+          <div class="inline-actions webhook-crud-actions">
+            <button id="webhook-crud-refresh-button" type="button" class="button button-sm">
+              Reload Config
+            </button>
+            <button id="webhook-crud-create-button" type="button" class="button button-sm">
+              Save Policy
+            </button>
+            <button id="webhook-crud-update-button" type="button" class="button button-sm">
+              Send Test
+            </button>
+            <button id="webhook-crud-delete-button" type="button" class="button button-sm">
+              Clear URL
+            </button>
+            <button id="webhook-crud-clear-button" type="button" class="button button-sm">
+              Reset Form
+            </button>
+          </div>
+        </section>
+      </div>
+    </dialog>
+
+    <dialog id="shortcuts-modal" class="shortcuts-modal" aria-label="Keyboard shortcuts">
+      <div class="shortcuts-modal-header">
+        <strong>Keyboard Shortcuts</strong>
+        <button id="shortcuts-modal-close" class="button icon-button stream-modal-close-button" type="button"
+          aria-label="Close keyboard shortcuts" title="Close keyboard shortcuts">
+          ×
+        </button>
+      </div>
+      <div class="shortcuts-modal-body">
+        <ul class="shortcuts-list">
+          <li><kbd class="shortcut-key">Ctrl/Cmd+K</kbd><span>Open command palette</span></li>
+          <li><kbd class="shortcut-key">Q</kbd><span>Toggle query controls</span></li>
+          <li><kbd class="shortcut-key">I</kbd><span>Toggle inspect panel</span></li>
+          <li><kbd class="shortcut-key">N</kbd><span>Toggle insights panel</span></li>
+          <li><kbd class="shortcut-key">W</kbd><span>Toggle webhook config modal</span></li>
+          <li><kbd class="shortcut-key">S</kbd><span>Open stream view</span></li>
+          <li><kbd class="shortcut-key">C</kbd><span>Open correlations view</span></li>
+          <li><kbd class="shortcut-key">T</kbd><span>Open timeline view</span></li>
+          <li><kbd class="shortcut-key">U</kbd><span>Copy current view URL</span></li>
+          <li><kbd class="shortcut-key">X</kbd><span>Reset to baseline query</span></li>
+          <li><kbd class="shortcut-key">Enter</kbd><span>Run query</span></li>
+          <li><kbd class="shortcut-key">Space</kbd><span>Toggle expanded stream</span></li>
+          <li><kbd class="shortcut-key">?</kbd><span>Toggle this shortcuts panel</span></li>
+        </ul>
+        <p class="panel-note">
+          Shortcuts are disabled while typing in inputs, selects, text areas, buttons, and editable fields.
+        </p>
+      </div>
+    </dialog>
+
+    <dialog id="command-palette-modal" class="command-palette-modal" aria-label="Command palette">
+      <div class="command-palette-head">
+        <label for="command-palette-input" class="command-palette-label">Command</label>
+        <input id="command-palette-input" class="command-palette-input" type="search" autocomplete="off"
+          placeholder="Search commands" aria-controls="command-palette-list" />
+      </div>
+      <div id="command-palette-list" class="command-palette-list" role="listbox"></div>
+      <div class="command-palette-foot">Enter to run / Esc to close</div>
+    </dialog>
+
+    <script src="./app.js"></script>
+  </body>
+
+</html>

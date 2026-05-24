@@ -1,0 +1,16 @@
+---
+title: Architecture
+description: How MikroScope is split between API and console.
+---
+
+MikroScope has two freestanding surfaces:
+
+- `api/` is the sidecar API and CLI source.
+- `app/` is the static browser console.
+- `docs/` is the Starlight documentation site.
+
+The sidecar owns ingestion, indexing, SQLite storage, query APIs, alert evaluation, OpenAPI documents, and health endpoints.
+
+The console owns the browser UI, saved local views, command palette, timeline, correlation tools, and alert policy controls. It reads `config.json` to decide which API origin to call.
+
+Product builds package both outputs together, but the API request handler does not serve the console.

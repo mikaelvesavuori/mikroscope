@@ -26,7 +26,7 @@ const DEFAULT_SERVER_OPTIONS: StartMikroScopeServerOptions = {
   logRetentionDays: 30,
   maintenanceIntervalMs: 6 * 60 * 60 * 1000,
   minFreeBytes: 256 * 1024 * 1024,
-  port: 4310,
+  port: 3000,
   protocol: "http",
   alertCooldownMs: 5 * 60 * 1000,
   alertErrorThreshold: 20,

@@ -36,10 +36,10 @@ sudo systemctl enable --now mikroscope.service
 sudo systemctl enable --now mikroscope-reindex.timer
 ```
 
-## Verification
+## Checks
 
 | Check | Command |
 | --- | --- |
 | Service status | `systemctl status mikroscope.service --no-pager` |
 | Reindex timer status | `systemctl status mikroscope-reindex.timer --no-pager` |
-| API health | `curl -sS http://127.0.0.1:4310/health` |
+| API health | `curl -sS http://127.0.0.1:3000/health` |

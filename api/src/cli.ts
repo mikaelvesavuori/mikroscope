@@ -86,7 +86,7 @@ function printHelp(): void {
       "  --logs   NDJSON log directory (default: ./logs)",
       "  --config JSON configuration file path (default: ./mikroscope.config.json when present)",
       "  --host   Bind host for `serve` (default: 127.0.0.1)",
-      "  --port   Server port for `serve` (default: 4310)",
+      "  --port   Server port for `serve` (default: 3000)",
       "  --protocol http|https for `serve` (default: http)",
       "  --https  Enable HTTPS for `serve` (default: false)",
       "  --tls-cert  TLS certificate path (required with --https)",

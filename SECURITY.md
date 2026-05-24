@@ -6,7 +6,8 @@ These versions of the project are currently being supported with security update
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
+| 2.x.x   | :white_check_mark: |
+| 1.x.x   | :x:                |
 | 0.x.x   | :x:                |
 
 ## Reporting a Vulnerability

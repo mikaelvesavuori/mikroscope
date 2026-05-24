@@ -12,7 +12,7 @@ MIKROSCOPE_PID_FILE="${STATE_DIR}/mikroscope.pid"
 MODE_FILE="${STATE_DIR}/mode"
 
 API_HOST="${MIKROSCOPE_DEMO_HOST:-127.0.0.1}"
-API_PORT="${MIKROSCOPE_DEMO_API_PORT:-4310}"
+API_PORT="${MIKROSCOPE_DEMO_API_PORT:-3000}"
 WEBHOOK_PORT="${MIKROSCOPE_DEMO_WEBHOOK_PORT:-9999}"
 
 INGEST_TOKEN="${MIKROSCOPE_DEMO_INGEST_TOKEN:-ingest-token}"
@@ -54,7 +54,7 @@ resolve_mikroscope_cmd() {
     return
   fi
 
-  printf "npx tsx %q" "${ROOT_DIR}/src/cli.ts"
+  printf "npx tsx %q" "${ROOT_DIR}/api/src/cli.ts"
 }
 
 wait_for_health() {

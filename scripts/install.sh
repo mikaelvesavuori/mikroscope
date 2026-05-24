@@ -153,7 +153,7 @@ BIN_DIR="$(prompt_value "Binary wrapper directory" "$DEFAULT_BIN_DIR")"
 CONFIG_FILE="$(prompt_value "Config file path" "$DEFAULT_CONFIG_FILE")"
 
 DEFAULT_HOST="${MIKROSCOPE_HOST:-127.0.0.1}"
-DEFAULT_PORT="${MIKROSCOPE_PORT:-4310}"
+DEFAULT_PORT="${MIKROSCOPE_PORT:-3000}"
 DEFAULT_LOGS_PATH="${MIKROSCOPE_LOGS_PATH:-$INSTALL_DIR/logs}"
 DEFAULT_DB_PATH="${MIKROSCOPE_DB_PATH:-$INSTALL_DIR/data/mikroscope.db}"
 DEFAULT_API_TOKEN="${MIKROSCOPE_API_TOKEN:-}"
@@ -216,7 +216,7 @@ if [ -f "\$MIKROSCOPE_ENV" ]; then
 fi
 
 if [ "\$#" -eq 0 ]; then
-  exec "\$MIKROSCOPE_HOME/mikroscope" serve --host "\${MIKROSCOPE_HOST:-127.0.0.1}" --port "\${MIKROSCOPE_PORT:-4310}" --logs "\${MIKROSCOPE_LOGS_PATH:-\$MIKROSCOPE_HOME/logs}" --db "\${MIKROSCOPE_DB_PATH:-\$MIKROSCOPE_HOME/data/mikroscope.db}"
+  exec "\$MIKROSCOPE_HOME/mikroscope" serve --host "\${MIKROSCOPE_HOST:-127.0.0.1}" --port "\${MIKROSCOPE_PORT:-3000}" --logs "\${MIKROSCOPE_LOGS_PATH:-\$MIKROSCOPE_HOME/logs}" --db "\${MIKROSCOPE_DB_PATH:-\$MIKROSCOPE_HOME/data/mikroscope.db}"
 fi
 
 exec "\$MIKROSCOPE_HOME/mikroscope" "\$@"

@@ -1,0 +1,38 @@
+---
+title: Comparison
+description: How MikroScope compares with other log inspection tools.
+---
+
+MikroScope ingests NDJSON logs into SQLite and exposes a static console for investigation. It is a focused sidecar, not a full observability platform.
+
+It is not meant to be better than every alternative. It is meant to be a better fit when ownership, simplicity, and a smaller operational surface matter.
+
+## Quick Comparison
+
+| Area | MikroScope | Common alternatives |
+| --- | --- | --- |
+| Data | NDJSON logs indexed locally | Logs, metrics, traces, errors, and more |
+| Storage | SQLite-backed sidecar | Distributed stores or managed SaaS |
+| Console | Static browser console | Managed dashboards and query workbenches |
+| Operations | Small deployable component | Larger clusters or paid services |
+| Best fit | Focused log investigation for owned apps | Fleet-wide observability and alerting |
+
+## Where MikroScope Fits
+
+- You want a small log inspection tool near your app.
+- Your logs are structured and fit a local sidecar model.
+- You need fast investigation without deploying a large stack.
+
+## MikroScope and MikroAPM
+
+MikroScope and [MikroAPM](https://mikrosuite.com/apm) are adjacent, not duplicates. MikroScope helps you query structured logs. MikroAPM watches reachability, sends uptime alerts, and serves public status pages.
+
+## When Another Tool May Be Better
+
+- You need metrics, tracing, profiling, and alert routing in one system.
+- You operate many services at high log volume.
+- You need managed retention, compliance, or cross-region search.
+
+## Bottom Line
+
+Choose MikroScope when you want a focused tool you can understand, run, and keep. Choose a larger platform when you need its scale, ecosystem, managed operations, or specialized workflows.

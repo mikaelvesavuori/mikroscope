@@ -7,7 +7,7 @@ import {
   DEFAULT_MIKROSCOPE_CONFIG_FILE_PATH,
   resolveMikroScopeServerOptions,
   resolveServerConfigFilePath,
-} from "../src/application/config/resolveMikroScopeServerOptions.js";
+} from "../api/src/application/config/resolveMikroScopeServerOptions.js";
 
 const cleanupPaths: string[] = [];
 
@@ -89,7 +89,7 @@ describe("MikroScope configuration resolution", () => {
 
     expect(resolved.dbPath).toBe("./data/mikroscope.db");
     expect(resolved.logsPath).toBe("./logs");
-    expect(resolved.port).toBe(4310);
+    expect(resolved.port).toBe(3000);
     expect(resolved.attachSignalHandlers).toBe(false);
   });
 

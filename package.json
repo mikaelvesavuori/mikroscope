@@ -1,12 +1,12 @@
 {
   "name": "mikroscope",
   "description": "Lightweight log sidecar for NDJSON ingestion, query, and alerting",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "author": "Mikael Vesavuori",
   "license": "MIT",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=25.0.0"
   },
   "keywords": [
     "nodejs",
@@ -32,45 +32,72 @@
   },
   "homepage": "https://github.com/mikaelvesavuori/mikroscope",
   "files": [
-    "dist",
+    "dist/cli.mjs",
     "openapi",
     "README.md",
     "LICENSE",
-    "!dist/**/*.map",
     "!tests"
   ],
   "scripts": {
-    "build": "node esbuild.config.mjs --esm",
+    "start": "npm run dev",
+    "dev": "npm run build:app && npm run dev:app:api-config && concurrently \"npm run dev:app:serve\" \"npm run dev:api\"",
+    "dev:api": "tsx watch api/src/cli.ts serve --port ${API_PORT:-3000} --cors-allow-origin http://127.0.0.1:${WEB_PORT:-8000}",
+    "dev:app": "npm run build:app && npm run dev:app:serve",
+    "dev:app:serve": "npx http-server dist/app -a ${HOST:-127.0.0.1} -p ${WEB_PORT:-8000} -c-1",
+    "dev:app:api-config": "node -e \"const fs=require('node:fs');const apiOrigin=process.env.MIKROSCOPE_API_ORIGIN||process.env.API_BASE_URL||('http://127.0.0.1:'+(process.env.API_PORT||3000));const config={apiOrigin,apiToken:process.env.MIKROSCOPE_API_TOKEN||''};fs.writeFileSync('dist/app/config.json', JSON.stringify(config, null, 2) + '\\n');\"",
+    "build": "npm run clean && node esbuild.config.mjs",
+    "build:api": "node esbuild.config.mjs --target api",
+    "build:app": "node esbuild.config.mjs --target app",
+    "docs": "npm run docs:install && npm --prefix docs run dev",
+    "docs:build": "npm run docs:install && npm --prefix docs run build",
+    "docs:preview": "npm run docs:install && npm --prefix docs run preview",
     "prepack": "npm run build",
-    "clean": "rm -rf dist/ lib/ *.zip *.tgz",
-    "start": "tsx src/cli.ts serve",
-    "index": "tsx src/cli.ts index",
-    "query": "tsx src/cli.ts query",
-    "aggregate": "tsx src/cli.ts aggregate",
-    "lint": "biome check ./src ./tests",
-    "lint:fix": "biome check ./src ./tests --write",
-    "test": "vitest run",
+    "clean": "rm -rf dist/ lib/ coverage/ *.zip *.tgz",
+    "index": "tsx api/src/cli.ts index",
+    "query": "tsx api/src/cli.ts query",
+    "aggregate": "tsx api/src/cli.ts aggregate",
+    "lint": "biome check api app tests scripts examples openapi esbuild.config.mjs vitest.config.ts package.json tsconfig.json biome.json",
+    "lint:fix": "biome check api app tests scripts examples openapi esbuild.config.mjs vitest.config.ts package.json tsconfig.json biome.json --write",
+    "format": "biome format --write api app tests scripts examples openapi esbuild.config.mjs vitest.config.ts package.json tsconfig.json biome.json",
+    "test": "vitest run --coverage",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run docs:build",
+    "assets": "node ../../scripts/generate-product-icons.mjs --product mikroscope",
     "mock-data": "tsx scripts/generate-mikroscope-mock-logs.ts",
     "mock-data:quick": "MOCK_LOG_DAYS=30 MOCK_LOGS_PER_DAY=30 MOCK_AUDIT_LOGS_PER_DAY=10 MOCK_LOG_TENANTS=20 tsx scripts/generate-mikroscope-mock-logs.ts",
     "demo:alerts": "bash scripts/manual-alert-demo.sh",
-    "release:assets": "bash scripts/create-release-assets.sh",
+    "release:assets": "node scripts/create-release-assets.mjs",
     "test:performance": "tsx tests/performance/run.perf.ts",
-    "test:performance:quick": "PERF_MS_FILE_COUNT=20 PERF_MS_LOGS_PER_FILE=250 PERF_MS_APPEND_RECORDS=800 PERF_MS_QUERY_COUNT=120 PERF_MS_TENANT_COUNT=350 tsx tests/performance/run.perf.ts"
+    "test:performance:quick": "PERF_MS_FILE_COUNT=20 PERF_MS_LOGS_PER_FILE=250 PERF_MS_APPEND_RECORDS=800 PERF_MS_QUERY_COUNT=120 PERF_MS_TENANT_COUNT=350 tsx tests/performance/run.perf.ts",
+    "release": "npm run build && npm run sbom && npm run scan && npm run licenses && npm run release:assets",
+    "sbom": "node scripts/create-prod-sbom.mjs",
+    "scan": "mkdir -p security && grype sbom:security/sbom.spdx.json -o json > security/grype-report.json",
+    "licenses": "mkdir -p security && grant check security/sbom.spdx.json --config .grant.yaml > security/grant-report.txt || { cat security/grant-report.txt; exit 1; }",
+    "precommit": "npm run lint && npm run typecheck && npm run test",
+    "prepare": "husky",
+    "docs:install": "npm --prefix docs ci"
   },
   "dependencies": {
     "mikroconf": "1"
   },
   "devDependencies": {
     "@biomejs/biome": "2",
-    "@types/node": "latest",
+    "@types/node": "25",
     "@vitest/coverage-v8": "4",
+    "concurrently": "latest",
     "esbuild": "latest",
-    "husky": "9",
+    "happy-dom": "20",
+    "html-minifier-terser": "7",
+    "husky": "9.1.7",
+    "lightningcss": "1",
     "tsx": "4",
-    "typescript": "5",
+    "http-server": "14",
+    "typescript": "6",
     "vitest": "4"
-  }
+  },
+  "workspaces": [
+    "docs"
+  ]
 }

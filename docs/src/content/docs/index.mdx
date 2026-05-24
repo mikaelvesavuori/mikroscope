@@ -1,0 +1,50 @@
+---
+title: MikroScope
+description: Self-hosted log sidecar and static console.
+template: splash
+hero:
+  tagline: Self-hosted log inspection for teams who need answers fast. Ingest NDJSON, query SQLite, inspect in a static console.
+  image:
+    light: ../../assets/logo.svg
+    dark: ../../assets/logo.svg
+  actions:
+    - text: Get Started
+      link: /scope/docs/getting-started/intro
+      icon: rocket
+    - text: Installation
+      link: /scope/docs/getting-started/installation
+      icon: laptop
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<CardGrid>
+  <Card title="Getting Started" icon="open-book">
+    Set up MikroScope and start inspecting.
+
+    <LinkCard title="What is MikroScope?" href="/scope/docs/getting-started/intro" />
+    <LinkCard title="Installation" href="/scope/docs/getting-started/installation" />
+  </Card>
+
+  <Card title="Guides" icon="puzzle">
+    Deep dives into MikroScope features.
+
+    <LinkCard title="Configuration" href="/scope/docs/guides/configuration" />
+    <LinkCard title="Console" href="/scope/docs/guides/console" />
+    <LinkCard title="Deployment" href="/scope/docs/guides/deployment" />
+  </Card>
+
+  <Card title="References" icon="document">
+    Complete API and configuration documentation.
+
+    <LinkCard title="API Reference" href="/scope/docs/reference/api" />
+    <LinkCard title="Architecture" href="/scope/docs/reference/architecture" />
+    <LinkCard title="Comparison" href="/scope/docs/reference/comparison" />
+  </Card>
+
+  <Card title="Related" icon="seti:config">
+    Need uptime checks and a status page?
+
+    <LinkCard title="MikroAPM" href="/apm/docs/getting-started/intro" />
+  </Card>
+</CardGrid>

@@ -1,0 +1,47 @@
+---
+title: Deployment
+description: Deploy the sidecar and static console independently.
+---
+
+## API
+
+Install the sidecar on the server:
+
+```bash
+npm install -g mikroscope
+```
+
+Run the service with a production config:
+
+```bash
+mikroscope serve --config /etc/mikroscope/mikroscope.config.json
+```
+
+The API can run without any frontend bundle.
+
+Use the API release ZIP instead when you need a pinned deployable artifact:
+
+```bash
+curl -sSL -o mikroscope_api.zip https://releases.mikrosuite.com/mikroscope_api_latest.zip
+unzip mikroscope_api.zip -d mikroscope_api
+cd mikroscope_api/*
+node cli.mjs serve --config /etc/mikroscope/mikroscope.config.json
+```
+
+## Console
+
+Download the console archive:
+
+```bash
+curl -sSL -o mikroscope_app.zip https://releases.mikrosuite.com/mikroscope_app_latest.zip
+unzip mikroscope_app.zip -d mikroscope_app
+```
+
+Deploy the extracted app files to a static host. The console host should be configured with the correct `config.json` and allowed by `corsAllowOrigin` in the API config.
+
+## Release Downloads
+
+The latest release archives are available from GitHub Releases and these stable URLs:
+
+- `https://releases.mikrosuite.com/mikroscope_api_latest.zip` - Node API and CLI bundle
+- `https://releases.mikrosuite.com/mikroscope_app_latest.zip` - static browser console

@@ -1,11 +1,25 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.2/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git"
   },
   "files": {
-    "includes": ["src/**/*", "static/**/*"]
+    "includes": [
+      "api/**/*",
+      "app/**/*",
+      "tests/**/*",
+      "scripts/**/*",
+      "*.json",
+      "*.mjs",
+      "*.ts",
+      "!package-lock.json",
+      "!dist",
+      "!coverage",
+      "!node_modules",
+      "!app/fonts",
+      "!.tmp"
+    ]
   },
   "formatter": {
     "enabled": true,
@@ -18,17 +32,10 @@
     "rules": {
       "recommended": true,
       "complexity": {
-        "noForEach": "off",
-        "noImportantStyles": "off"
-      },
-      "correctness": {
-        "noUnusedVariables": "error"
-      },
-      "style": {
-        "noNonNullAssertion": "off",
-        "useConst": "error"
+        "noForEach": "off"
       },
       "suspicious": {
+        "noConsole": "off",
         "noExplicitAny": "error"
       }
     }

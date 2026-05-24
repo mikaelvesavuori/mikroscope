@@ -7,11 +7,11 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:4310",
+      "url": "http://127.0.0.1:3000",
       "description": "Default local HTTP server"
     },
     {
-      "url": "https://127.0.0.1:4310",
+      "url": "https://127.0.0.1:3000",
       "description": "Local HTTPS server (when TLS is configured)"
     }
   ],

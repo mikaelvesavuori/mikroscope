@@ -1,0 +1,43 @@
+---
+title: Configuration
+description: Configure the sidecar runtime and console API target.
+---
+
+MikroScope resolves API configuration from defaults, JSON config, environment variables, and CLI flags.
+
+## API Config
+
+Start from:
+
+```bash
+cp examples/mikroscope.config.json mikroscope.config.json
+```
+
+Common settings:
+
+| Setting | Purpose |
+| --- | --- |
+| `host` | Bind host. |
+| `port` | API port. |
+| `dbPath` | SQLite database file path. |
+| `logsPath` | Directory containing NDJSON logs. |
+| `apiToken` | Bearer token for query and admin APIs. |
+| `ingestProducers` | Token-to-producer mapping for ingestion. |
+| `corsAllowOrigin` | Origins that may call the API. |
+
+## Environment
+
+Most config values also map to `MIKROSCOPE_*` environment variables, such as `MIKROSCOPE_PORT`, `MIKROSCOPE_DB_PATH`, `MIKROSCOPE_LOGS_PATH`, and `MIKROSCOPE_API_TOKEN`.
+
+## Console Config
+
+The static console reads `config.json`:
+
+```json
+{
+  "apiOrigin": "http://127.0.0.1:3000",
+  "apiToken": "replace-with-api-token"
+}
+```
+
+Keep `apiToken` out of public deployments unless the console is behind access control.

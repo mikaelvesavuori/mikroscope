@@ -1,0 +1,35 @@
+{
+  "name": "mikroscope-docs",
+  "type": "module",
+  "version": "1.0.0",
+  "keywords": [
+    "mikroscope",
+    "documentation",
+    "docs",
+    "starlight"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikaelvesavuori/mikroscope.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mikaelvesavuori/mikroscope/issues"
+  },
+  "homepage": "https://github.com/mikaelvesavuori/mikroscope#readme",
+  "private": true,
+  "description": "The documentation site for MikroScope.",
+  "author": "MikroScope",
+  "license": "MIT",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "latest",
+    "astro": "latest",
+    "typescript": "6"
+  }
+}

@@ -1,0 +1,22 @@
+---
+title: API Reference
+description: MikroScope API endpoints.
+---
+
+The API sidecar exposes:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Runtime, storage, ingest, auth, and alert health. |
+| `GET /openapi.json` | OpenAPI 3.1 JSON document. |
+| `GET /openapi.yaml` | OpenAPI 3.1 YAML document. |
+| `GET /docs` | Scalar API reference for the sidecar API. |
+| `POST /api/ingest` | Ingest NDJSON-style log records. |
+| `GET /api/logs` | Query indexed logs. |
+| `GET /api/logs/aggregate` | Aggregate logs by level, event, field, or correlation. |
+| `GET /api/alerts/config` | Read alert policy. |
+| `PUT /api/alerts/config` | Update alert policy. |
+| `POST /api/alerts/test-webhook` | Send a test webhook payload. |
+| `POST /api/reindex` | Rebuild the SQLite index from logs. |
+
+Protected API routes accept bearer token or basic auth when configured.

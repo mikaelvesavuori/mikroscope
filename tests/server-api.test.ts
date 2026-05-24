@@ -1,12 +1,29 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
-import { request as httpRequest } from "node:http";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer, request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { startMikroScopeServer } from "../src/server.js";
+import {
+  type RunningMikroScopeServer,
+  type StartMikroScopeServerOptions,
+  startMikroScopeServer as startBaseMikroScopeServer,
+} from "../api/src/server.js";
+
+const TEST_RETENTION_DAYS = 365_000;
+
+function startMikroScopeServer(
+  options: StartMikroScopeServerOptions,
+): Promise<RunningMikroScopeServer> {
+  return startBaseMikroScopeServer({
+    dbAuditRetentionDays: TEST_RETENTION_DAYS,
+    dbRetentionDays: TEST_RETENTION_DAYS,
+    logAuditRetentionDays: TEST_RETENTION_DAYS,
+    logRetentionDays: TEST_RETENTION_DAYS,
+    ...options,
+  });
+}
 
 type JsonResponse = {
   headers: Record<string, string | string[] | undefined>;
@@ -32,7 +49,10 @@ function requestJson(
         ? options.body
         : JSON.stringify(options.body);
   const headers = { ...(options.headers || {}) };
-  if (body !== undefined && !Object.keys(headers).some((key) => key.toLowerCase() === "content-type")) {
+  if (
+    body !== undefined &&
+    !Object.keys(headers).some((key) => key.toLowerCase() === "content-type")
+  ) {
     headers["content-type"] = "application/json";
   }
 
@@ -535,7 +555,7 @@ describe("MikroScope API sidecar", () => {
 
     try {
       const response = await requestJson(new URL("/api/ingest", running.url), {
-        body: "{\"logs\":[",
+        body: '{"logs":[',
         headers: { authorization: "Bearer token-a" },
         method: "POST",
       });
@@ -754,7 +774,10 @@ describe("MikroScope API sidecar", () => {
       expect(typeof firstBody.nextCursor).toBe("string");
 
       const secondPage = await requestJson(
-        new URL(`/api/logs?limit=1&cursor=${encodeURIComponent(firstBody.nextCursor || "")}`, running.url),
+        new URL(
+          `/api/logs?limit=1&cursor=${encodeURIComponent(firstBody.nextCursor || "")}`,
+          running.url,
+        ),
         { headers },
       );
       expect(secondPage.statusCode).toBe(200);
@@ -762,7 +785,9 @@ describe("MikroScope API sidecar", () => {
       expect(secondBody.entries.length).toBe(1);
       expect(secondBody.entries[0].id).not.toBe(firstBody.entries[0].id);
 
-      const byLevel = await requestJson(new URL("/api/logs/aggregate?groupBy=level", running.url), { headers });
+      const byLevel = await requestJson(new URL("/api/logs/aggregate?groupBy=level", running.url), {
+        headers,
+      });
       expect(byLevel.statusCode).toBe(200);
       const byLevelBody = byLevel.body as { buckets: Array<{ count: number; key: string }> };
       const errorBucket = byLevelBody.buckets.find((bucket) => bucket.key === "ERROR");
@@ -777,11 +802,16 @@ describe("MikroScope API sidecar", () => {
       const customerOne = byCustomerBody.buckets.find((bucket) => bucket.key === "CUST-1");
       expect(customerOne?.count).toBe(2);
 
-      const byCorrelation = await requestJson(new URL("/api/logs/aggregate?groupBy=correlation", running.url), {
-        headers,
-      });
+      const byCorrelation = await requestJson(
+        new URL("/api/logs/aggregate?groupBy=correlation", running.url),
+        {
+          headers,
+        },
+      );
       expect(byCorrelation.statusCode).toBe(200);
-      const byCorrelationBody = byCorrelation.body as { buckets: Array<{ count: number; key: string }> };
+      const byCorrelationBody = byCorrelation.body as {
+        buckets: Array<{ count: number; key: string }>;
+      };
       const corrOne = byCorrelationBody.buckets.find((bucket) => bucket.key === "CORR-1");
       const reqThree = byCorrelationBody.buckets.find((bucket) => bucket.key === "REQ-3");
       expect(corrOne?.count).toBe(2);
@@ -885,7 +915,9 @@ describe("MikroScope API sidecar", () => {
         method: "POST",
       });
       expect(reindex.statusCode).toBe(200);
-      const reindexBody = reindex.body as { reset: { entriesDeleted: number; fieldsDeleted: number } };
+      const reindexBody = reindex.body as {
+        reset: { entriesDeleted: number; fieldsDeleted: number };
+      };
       expect(reindexBody.reset.entriesDeleted).toBeGreaterThan(0);
       expect(reindexBody.reset.fieldsDeleted).toBeGreaterThanOrEqual(0);
 
@@ -1003,7 +1035,12 @@ describe("MikroScope API sidecar", () => {
       expect(config.statusCode).toBe(200);
       const configBody = config.body as {
         configPath: string;
-        policy: { enabled: boolean; intervalMs: number; webhookUrl?: string; windowMinutes: number };
+        policy: {
+          enabled: boolean;
+          intervalMs: number;
+          webhookUrl?: string;
+          windowMinutes: number;
+        };
       };
       expect(configBody.configPath).toBe(configPath);
       expect(configBody.policy.enabled).toBe(true);
@@ -1331,22 +1368,31 @@ describe("MikroScope API sidecar", () => {
     try {
       const headers = { authorization: "Bearer secret-token" };
 
-      const malformedCursor = await requestJson(new URL("/api/logs?limit=1&cursor=not-base64", running.url), {
-        headers,
-      });
+      const malformedCursor = await requestJson(
+        new URL("/api/logs?limit=1&cursor=not-base64", running.url),
+        {
+          headers,
+        },
+      );
       expect(malformedCursor.statusCode).toBe(200);
       const malformedCursorBody = malformedCursor.body as { entries: Array<{ event: string }> };
       expect(malformedCursorBody.entries.length).toBe(1);
       expect(malformedCursorBody.entries[0].event).toBe("order.created");
 
-      const invalidGroupBy = await requestJson(new URL("/api/logs/aggregate?groupBy=invalid", running.url), {
-        headers,
-      });
+      const invalidGroupBy = await requestJson(
+        new URL("/api/logs/aggregate?groupBy=invalid", running.url),
+        {
+          headers,
+        },
+      );
       expect(invalidGroupBy.statusCode).toBe(400);
 
-      const missingGroupField = await requestJson(new URL("/api/logs/aggregate?groupBy=field", running.url), {
-        headers,
-      });
+      const missingGroupField = await requestJson(
+        new URL("/api/logs/aggregate?groupBy=field", running.url),
+        {
+          headers,
+        },
+      );
       expect(missingGroupField.statusCode).toBe(400);
       const missingFieldBody = missingGroupField.body as { error: string };
       expect(missingFieldBody.error).toContain("groupField");
@@ -1432,7 +1478,9 @@ describe("MikroScope API sidecar", () => {
       const chunks: Buffer[] = [];
       req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
       req.on("end", () => {
-        received.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as { rule?: string; source?: string });
+        received.push(
+          JSON.parse(Buffer.concat(chunks).toString("utf8")) as { rule?: string; source?: string },
+        );
         res.statusCode = 204;
         res.end();
       });
@@ -1490,7 +1538,9 @@ describe("MikroScope API sidecar", () => {
       const chunks: Buffer[] = [];
       req.on("data", (chunk) => chunks.push(Buffer.from(chunk)));
       req.on("end", () => {
-        received.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as { rule?: string; source?: string });
+        received.push(
+          JSON.parse(Buffer.concat(chunks).toString("utf8")) as { rule?: string; source?: string },
+        );
         res.statusCode = 204;
         res.end();
       });

@@ -1,4 +1,1 @@
-npm run typecheck
-npm run lint
-npm test
-git add .
+npm run precommit

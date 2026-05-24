@@ -1,11 +1,11 @@
-import { appendFile, mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { LogQueryService } from "../src/application/services/LogQueryService.js";
-import { LogIndexer } from "../src/infrastructure/indexing/LogIndexer.js";
-import { LogDatabase } from "../src/infrastructure/persistence/LogDatabase.js";
+import { LogQueryService } from "../api/src/application/services/LogQueryService.js";
+import { LogIndexer } from "../api/src/infrastructure/indexing/LogIndexer.js";
+import { LogDatabase } from "../api/src/infrastructure/persistence/LogDatabase.js";
 
 function createLogLine(input: {
   timestamp: string;

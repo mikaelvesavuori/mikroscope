@@ -3,10 +3,17 @@
     "target": "ES2024",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    "allowJs": true,
+    "checkJs": false,
     "strict": true,
-    "esModuleInterop": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "allowSyntheticDefaultImports": true,
+    "types": ["node", "vitest/globals"]
   },
-  "include": ["src/**.ts", "src/**/*.ts"]
+  "include": ["api/src/**/*.ts", "app/**/*.js", "tests/**/*.ts", "vitest.config.ts"],
+  "exclude": ["node_modules", "dist", "coverage"]
 }

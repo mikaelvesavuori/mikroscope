@@ -1,0 +1,20 @@
+---
+title: Console
+description: Download and serve MikroScope Console as static files.
+---
+
+MikroScope Console is a static browser app. It is useful only when it can reach a MikroScope API, but the API never depends on the console.
+
+Download the static console archive:
+
+```bash
+curl -sSL -o mikroscope_app.zip https://releases.mikrosuite.com/mikroscope_app_latest.zip
+unzip mikroscope_app.zip -d mikroscope_app
+```
+
+Serve the extracted app directory with Caddy, Nginx, object storage, a CDN, or a local static server.
+
+```bash
+cd mikroscope_app/*
+npx http-server . -a 127.0.0.1 -p 8000 -c-1
+```

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 type MockConfig = {
@@ -20,55 +20,87 @@ type WeightedEvent = {
 const NORMAL_EVENTS: WeightedEvent[] = [
   {
     event: "chat.message.received",
-    levelWeights: [{ level: "INFO", weight: 80 }, { level: "DEBUG", weight: 20 }],
+    levelWeights: [
+      { level: "INFO", weight: 80 },
+      { level: "DEBUG", weight: 20 },
+    ],
     message: "Incoming user message received",
     weight: 18,
   },
   {
     event: "ai.intent.detected",
-    levelWeights: [{ level: "INFO", weight: 74 }, { level: "WARN", weight: 20 }, { level: "ERROR", weight: 6 }],
+    levelWeights: [
+      { level: "INFO", weight: 74 },
+      { level: "WARN", weight: 20 },
+      { level: "ERROR", weight: 6 },
+    ],
     message: "Intent detection completed",
     weight: 12,
   },
   {
     event: "matcher.product.candidates",
-    levelWeights: [{ level: "DEBUG", weight: 60 }, { level: "INFO", weight: 34 }, { level: "WARN", weight: 6 }],
+    levelWeights: [
+      { level: "DEBUG", weight: 60 },
+      { level: "INFO", weight: 34 },
+      { level: "WARN", weight: 6 },
+    ],
     message: "Product candidate set generated",
     weight: 15,
   },
   {
     event: "order.draft.updated",
-    levelWeights: [{ level: "INFO", weight: 88 }, { level: "WARN", weight: 10 }, { level: "ERROR", weight: 2 }],
+    levelWeights: [
+      { level: "INFO", weight: 88 },
+      { level: "WARN", weight: 10 },
+      { level: "ERROR", weight: 2 },
+    ],
     message: "Draft order state updated",
     weight: 12,
   },
   {
     event: "order.placed",
-    levelWeights: [{ level: "INFO", weight: 95 }, { level: "WARN", weight: 5 }],
+    levelWeights: [
+      { level: "INFO", weight: 95 },
+      { level: "WARN", weight: 5 },
+    ],
     message: "Order submitted to supplier",
     weight: 8,
   },
   {
     event: "supplier.orders.viewed",
-    levelWeights: [{ level: "INFO", weight: 80 }, { level: "DEBUG", weight: 20 }],
+    levelWeights: [
+      { level: "INFO", weight: 80 },
+      { level: "DEBUG", weight: 20 },
+    ],
     message: "Supplier orders page viewed",
     weight: 9,
   },
   {
     event: "db.write.completed",
-    levelWeights: [{ level: "DEBUG", weight: 68 }, { level: "INFO", weight: 27 }, { level: "WARN", weight: 5 }],
+    levelWeights: [
+      { level: "DEBUG", weight: 68 },
+      { level: "INFO", weight: 27 },
+      { level: "WARN", weight: 5 },
+    ],
     message: "Persistence write completed",
     weight: 10,
   },
   {
     event: "db.write.conflict",
-    levelWeights: [{ level: "WARN", weight: 67 }, { level: "ERROR", weight: 33 }],
+    levelWeights: [
+      { level: "WARN", weight: 67 },
+      { level: "ERROR", weight: 33 },
+    ],
     message: "Version conflict detected during write",
     weight: 3,
   },
   {
     event: "http.request.completed",
-    levelWeights: [{ level: "INFO", weight: 90 }, { level: "WARN", weight: 9 }, { level: "ERROR", weight: 1 }],
+    levelWeights: [
+      { level: "INFO", weight: 90 },
+      { level: "WARN", weight: 9 },
+      { level: "ERROR", weight: 1 },
+    ],
     message: "HTTP request processed",
     weight: 13,
   },
@@ -158,6 +190,8 @@ async function main(): Promise<void> {
   const outDir = config.outDir;
   const normalDir = join(outDir, "generated");
   const auditDir = join(outDir, "audit", "generated");
+  await rm(normalDir, { recursive: true, force: true });
+  await rm(auditDir, { recursive: true, force: true });
   await mkdir(normalDir, { recursive: true });
   await mkdir(auditDir, { recursive: true });
 

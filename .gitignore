@@ -4,7 +4,9 @@ dist/
 coverage/
 data/
 .claude/
-docs/
+docs/.astro/
+docs/dist/
+docs/node_modules/
 .wrangler/
 logs/
 .tmp/
@@ -38,3 +40,7 @@ deploy-*.sh
 # Keep versioned systemd units
 !deploy/systemd/*.service
 !deploy/systemd/*.timer
+release/
+security/
+grype-report.json
+grant-report.txt
